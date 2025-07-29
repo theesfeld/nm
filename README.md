@@ -78,59 +78,98 @@ This version introduces significant improvements to the user interface and exper
   :ensure t
   :init
   ;; Core settings (before package loads)
-  (setq nm-auto-refresh t
-        nm-refresh-interval 5)
+  (setq nm-auto-refresh t                   ; Auto-refresh network status
+        nm-refresh-interval 5               ; Refresh every 5 seconds
+        nm-service "org.freedesktop.NetworkManager"  ; D-Bus service name
+        nm-path "/org/freedesktop/NetworkManager"    ; D-Bus object path
+        nm-settings-path "/org/freedesktop/NetworkManager/Settings")  ; Settings path
   
   :config
   ;; Enable optional features
   (nm-modeline-mode 1)      ; Show connection status in modeline
   (nm-notify-mode 1)        ; Enable desktop notifications
   
-  ;; Modeline customization
-  (setq nm-modeline-format " [%s]"  ; Format string for modeline
-        nm-modeline-refresh-interval 5
-        nm-modeline-show-vpn t
-        nm-modeline-display-format 'icon-and-text)  ; or 'icon-only, 'text-only
+  ;; Modeline customization - Display format
+  (setq nm-modeline-display-format 'icon-and-text  ; 'icon-only, 'text-only, or 'icon-and-text
+        nm-modeline-format " %s"           ; Format string (%s = status)
+        nm-modeline-refresh-interval 5     ; Update interval in seconds
+        nm-modeline-show-vpn t)            ; Show VPN status
   
-  ;; Custom icons - WiFi signal strength
+  ;; Modeline icons - Connection types
+  (setq nm-modeline-disconnected-icon "⚠"  ; No connection
+        nm-modeline-ethernet-icon "🖧"     ; Ethernet connection
+        nm-modeline-wifi-icon "📶"         ; WiFi base icon
+        nm-modeline-vpn-icon "🔒")         ; VPN active
+  
+  ;; WiFi signal strength icons
   (setq nm-modeline-wifi-icons
-        '((high . "▂▄▆█")     ; 75-100%
-          (medium . "▂▄▆_")   ; 50-74%
-          (low . "▂▄__")      ; 25-49%
-          (none . "▂___")))   ; 0-24%
-  
-  ;; Custom icons - Connection types
-  (setq nm-modeline-disconnected-icon "⚠"
-        nm-modeline-ethernet-icon "🔌"
-        nm-modeline-wifi-icon "📶"
-        nm-modeline-vpn-icon "🔒")
+        '((high . "▂▄▆█")     ; 75-100% signal
+          (medium . "▂▄▆_")   ; 50-74% signal
+          (low . "▂▄__")      ; 25-49% signal
+          (none . "▂___")))   ; 0-24% signal
   
   ;; Alternative: Use Nerd Fonts (requires Nerd Font installed)
-  ;; (setq nm-modeline-use-nerd-fonts t)
+  ;; (setq nm-modeline-use-nerd-fonts t
+  ;;       nm-modeline-nerd-icons
+  ;;       '((disconnected . "")    ; nf-md-wifi_off
+  ;;         (ethernet . "")        ; nf-md-ethernet
+  ;;         (wifi-high . "")       ; nf-md-wifi_strength_4
+  ;;         (wifi-medium . "")     ; nf-md-wifi_strength_3
+  ;;         (wifi-low . "")        ; nf-md-wifi_strength_2
+  ;;         (wifi-none . "")       ; nf-md-wifi_strength_1
+  ;;         (vpn . "")))           ; nf-md-shield_key
   
   ;; Notification settings
-  (setq nm-notify-connect-message "Connected to %s"
+  (setq nm-notify-enabled t                 ; Enable notifications
+        nm-notify-use-notifications-lib t   ; Use desktop notifications
+        nm-notify-connect-message "Connected to %s"
         nm-notify-disconnect-message "Disconnected from %s"
-        nm-notify-use-notifications-lib t)  ; Use desktop notifications
+        nm-notify-state-change-message "Network state: %s"
+        nm-notify-vpn-connect-message "VPN connected: %s"
+        nm-notify-vpn-disconnect-message "VPN disconnected: %s")
   
   ;; Security settings
   (setq nm-secrets-use-auth-source t        ; Use Emacs auth-source
+        nm-secrets-auth-source-host "NetworkManager"  ; Host for auth entries
         auth-sources '("~/.authinfo.gpg"))  ; Encrypted password storage
   
-  ;; UI preferences
-  (setq nm-ui-use-tabulated-list t         ; Use enhanced table views
-        nm-ui-wifi-auto-scan t              ; Auto-scan when opening WiFi browser
-        nm-ui-connections-show-auto nil)    ; Hide autoconnect connections
+  ;; UI buffer names (for customization)
+  (setq nm-ui-buffer-name "*NetworkManager*"
+        nm-ui-wifi-buffer-name "*NetworkManager WiFi*"
+        nm-ui-connection-buffer-name "*NetworkManager Connection*")
+  
+  ;; UI behavior settings (these are usually set via defvar, but can be customized)
+  ;; (setq nm-ui-use-tabulated-list t      ; Use enhanced table views
+  ;;       nm-ui-wifi-auto-scan t           ; Auto-scan when opening WiFi browser
+  ;;       nm-ui-connections-show-auto nil) ; Hide autoconnect connections
   
   :bind-keymap
+  ;; Main prefix key for all NetworkManager commands
   ("C-c N" . nm-prefix-map)
   
   :bind
-  ;; Quick access bindings (optional)
-  (("C-c n s" . nm-status)           ; Quick status
-   ("C-c n w" . nm-ui-wifi)          ; Jump to WiFi
-   ("C-c n c" . nm-ui-connections)   ; Jump to connections
-   ("C-c n n" . nm-toggle-networking)))
+  ;; Quick access bindings (optional - in addition to prefix map)
+  (("C-c n s" . nm-status)              ; Quick status check
+   ("C-c n w" . nm-ui-wifi)             ; Jump to WiFi browser
+   ("C-c n c" . nm-ui-connections)      ; Jump to connections
+   ("C-c n d" . nm-ui-dashboard)        ; Open dashboard
+   ("C-c n n" . nm-toggle-networking)   ; Toggle networking
+   ("C-c n W" . nm-toggle-wireless))    ; Toggle wireless
+  
+  :hook
+  ;; Optional hooks for integration with other modes
+  ((after-init . nm-modeline-mode)      ; Enable modeline on startup
+   (after-init . nm-notify-mode))       ; Enable notifications on startup
+  
+  :custom-face
+  ;; Optional face customizations for UI elements
+  ;; (nm-ui-signal-excellent ((t (:foreground "green" :weight bold))))
+  ;; (nm-ui-signal-good ((t (:foreground "lime green"))))
+  ;; (nm-ui-signal-fair ((t (:foreground "yellow"))))
+  ;; (nm-ui-signal-poor ((t (:foreground "orange red"))))
+  ;; (nm-ui-security-open ((t (:foreground "red"))))
+  ;; (nm-ui-active-connection ((t (:foreground "green" :weight bold))))
+  )
 ```
 
 ### Manual Installation
