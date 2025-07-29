@@ -51,6 +51,12 @@
 (defconst nm-dbus-interface-access-point "org.freedesktop.NetworkManager.AccessPoint"
   "D-Bus interface for NetworkManager Access Point.")
 
+(defconst nm-dbus-interface-agent-manager "org.freedesktop.NetworkManager.AgentManager"
+  "D-Bus interface for NetworkManager Agent Manager.")
+
+(defconst nm-dbus-agent-manager-path "/org/freedesktop/NetworkManager/AgentManager"
+  "D-Bus path for NetworkManager Agent Manager.")
+
 (defun nm-dbus-call-method (path interface method &rest args)
   "Call D-Bus METHOD on PATH with INTERFACE and optional ARGS."
   (when (nm-available-p)

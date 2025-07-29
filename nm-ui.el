@@ -311,10 +311,25 @@
             (security (cdr (assoc 'security network))))
         (if (string= security "Open")
             (nm-wifi-connect-to-ap network)
-          (nm-ui-password-prompt
-           (format "Password for %s: " ssid)
-           (lambda (password)
-             (nm-wifi-connect-to-ap network password))))))))
+          ;; Check auth-source first
+          (require 'nm-secrets)
+          (let ((saved-password (nm-secrets-get-from-auth-source ssid "psk")))
+            (if saved-password
+                (progn
+                  (nm-wifi-connect-to-ap network saved-password)
+                  ;; Clear password from memory
+                  (dotimes (i (length saved-password))
+                    (aset saved-password i ?\0)))
+              (nm-ui-password-prompt
+               (format "Password for %s: " ssid)
+               (lambda (password)
+                 (nm-wifi-connect-to-ap network password)
+                 ;; Ask to save password
+                 (when (y-or-n-p "Save password? ")
+                   (nm-secrets-save-to-auth-source ssid "psk" password))
+                 ;; Clear password from memory
+                 (dotimes (i (length password))
+                   (aset password i ?\0)))))))))))
 
 (defun nm-ui-disconnect ()
   "Disconnect current connection."
@@ -850,9 +865,18 @@
                                       ("mode" . "infrastructure")))
               settings)
         (when (and password (> (length password) 0))
-          (push `("802-11-wireless-security" . (("key-mgmt" . "wpa-psk")
-                                                 ("psk" . ,password)))
-                settings))))
+          ;; Add security settings but NOT the actual password
+          (push `("802-11-wireless-security" . (("key-mgmt" . "wpa-psk")))
+                settings)
+          ;; Store password securely if auth-source is enabled
+          (require 'nm-secrets)
+          (when nm-secrets-use-auth-source
+            (nm-secrets-save-to-auth-source name "psk" password))
+          ;; Clear password from widget
+          (widget-value-set (cdr (assoc 'password extra-widgets)) "")
+          ;; Clear password from memory
+          (dotimes (i (length password))
+            (aset password i ?\0)))))
      
      ((equal type "vpn")
       (let ((vpn-type (widget-value (cdr (assoc 'vpn-type extra-widgets)))))

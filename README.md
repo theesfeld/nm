@@ -35,7 +35,10 @@ A comprehensive NetworkManager interface for Emacs, providing complete control o
   (setq nm-auto-refresh t
         nm-refresh-interval 5)
   ;; Optional: Enable modeline indicator
-  (nm-modeline-mode 1)
+  ;; (nm-modeline-mode 1)
+  ;; Or with custom settings:
+  ;; (setq nm-modeline-use-nerd-fonts t)
+  ;; (nm-modeline-mode 1)
   :bind-keymap
   ("C-c N" . nm-prefix-map))
 ```
@@ -626,6 +629,35 @@ The modeline will display:
 - `🖧 eth0` - Ethernet connection
 - `📶 MyWiFi 85%` - WiFi with signal strength
 - `🔒 VPN` - Active VPN connection
+
+## Security
+
+### Password Management
+
+NetworkManager Emacs uses secure password handling:
+
+1. **No passwords in memory**: Passwords are cleared from memory immediately after use
+2. **auth-source integration**: Passwords can be stored in your encrypted auth-source backend
+3. **No passwords in connection files**: Passwords are never saved with connection profiles
+
+Configure secure password storage:
+```elisp
+;; Use auth-source for password storage (default: t)
+(setq nm-secrets-use-auth-source t)
+
+;; Customize auth-source backend (e.g., use GPG-encrypted file)
+(setq auth-sources '("~/.authinfo.gpg"))
+```
+
+When connecting to a secured network:
+- First checks auth-source for saved passwords
+- Prompts for password if not found
+- Optionally saves to auth-source (with user confirmation)
+- Clears password from memory after use
+
+### NetworkManager Secret Agent
+
+The package can act as a NetworkManager secret agent to handle authentication requests securely. This ensures passwords are only provided when NetworkManager needs them, not stored in connection profiles.
 
 ## Troubleshooting
 
