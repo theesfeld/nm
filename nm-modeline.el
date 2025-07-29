@@ -1,0 +1,221 @@
+;;; nm-modeline.el --- NetworkManager modeline indicator  -*- lexical-binding: t; -*-
+
+;; Copyright (C) 2025 William Theesfeld <william@theesfeld.net>
+
+;; This program is free software: you can redistribute it and/or modify
+;; it under the terms of the GNU General Public License as published by
+;; the Free Software Foundation, either version 3 of the License, or
+;; (at your option) any later version.
+
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU General Public License for more details.
+
+;; You should have received a copy of the GNU General Public License
+;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+;;; Commentary:
+
+;; Modeline indicator for NetworkManager connection status.
+
+;;; Code:
+
+(require 'nm)
+(require 'nm-dbus)
+(require 'nm-device)
+(require 'nm-connection)
+(require 'nm-wifi)
+(require 'nm-vpn)
+
+(declare-function nm-get-primary-connection "nm" ())
+(declare-function nm-active-connections-info "nm-connection" ())
+(declare-function nm-device-info "nm-device" (device-path))
+(declare-function nm-device-wireless-get-active-access-point "nm-device" (device-path))
+(declare-function nm-access-point-get-strength "nm-wifi" (ap-path))
+
+(defgroup nm-modeline nil
+  "NetworkManager modeline indicator."
+  :group 'nm)
+
+(defcustom nm-modeline-format " %s"
+  "Format string for modeline display. %s is replaced with status."
+  :type 'string
+  :group 'nm-modeline)
+
+(defcustom nm-modeline-refresh-interval 5
+  "Refresh interval in seconds for modeline updates."
+  :type 'integer
+  :group 'nm-modeline)
+
+(defcustom nm-modeline-show-vpn t
+  "Whether to show VPN status in modeline."
+  :type 'boolean
+  :group 'nm-modeline)
+
+(defcustom nm-modeline-disconnected-icon "⚠"
+  "Icon to show when disconnected."
+  :type 'string
+  :group 'nm-modeline)
+
+(defcustom nm-modeline-ethernet-icon "🖧"
+  "Icon for ethernet connection."
+  :type 'string
+  :group 'nm-modeline)
+
+(defcustom nm-modeline-wifi-icon "📶"
+  "Icon for WiFi connection."
+  :type 'string
+  :group 'nm-modeline)
+
+(defcustom nm-modeline-vpn-icon "🔒"
+  "Icon for VPN connection."
+  :type 'string
+  :group 'nm-modeline)
+
+(defcustom nm-modeline-use-nerd-fonts nil
+  "Use Nerd Font icons instead of emoji."
+  :type 'boolean
+  :group 'nm-modeline)
+
+(defvar nm-modeline-string ""
+  "Current modeline string.")
+
+(defvar nm-modeline-timer nil
+  "Timer for modeline updates.")
+
+(defvar nm-modeline-nerd-icons
+  '((disconnected . "")
+    (ethernet . "")
+    (wifi-high . "")
+    (wifi-medium . "")
+    (wifi-low . "")
+    (wifi-none . "")
+    (vpn . ""))
+  "Nerd Font icons for modeline.")
+
+(defun nm-modeline-get-icon (type &optional strength)
+  "Get icon for connection TYPE with optional signal STRENGTH."
+  (if nm-modeline-use-nerd-fonts
+      (pcase type
+        ('disconnected (alist-get 'disconnected nm-modeline-nerd-icons))
+        ('ethernet (alist-get 'ethernet nm-modeline-nerd-icons))
+        ('wifi (cond
+                ((and strength (>= strength 75))
+                 (alist-get 'wifi-high nm-modeline-nerd-icons))
+                ((and strength (>= strength 50))
+                 (alist-get 'wifi-medium nm-modeline-nerd-icons))
+                ((and strength (>= strength 25))
+                 (alist-get 'wifi-low nm-modeline-nerd-icons))
+                (t (alist-get 'wifi-none nm-modeline-nerd-icons))))
+        ('vpn (alist-get 'vpn nm-modeline-nerd-icons))
+        (_ "?"))
+    (pcase type
+      ('disconnected nm-modeline-disconnected-icon)
+      ('ethernet nm-modeline-ethernet-icon)
+      ('wifi nm-modeline-wifi-icon)
+      ('vpn nm-modeline-vpn-icon)
+      (_ "?"))))
+
+(defun nm-modeline-get-primary-info ()
+  "Get primary connection information."
+  (let ((primary-conn (nm-get-primary-connection)))
+    (when primary-conn
+      (list :type (cdr (assoc 'type primary-conn))
+            :id (cdr (assoc 'id primary-conn))
+            :device-path (car (cdr (assoc 'devices primary-conn)))))))
+
+(defun nm-modeline-format-ethernet (device-info)
+  "Format ethernet connection with DEVICE-INFO."
+  (format "%s %s" 
+          (nm-modeline-get-icon 'ethernet)
+          (or (cdr (assoc 'interface device-info)) "eth")))
+
+(defun nm-modeline-format-wifi (id device-path)
+  "Format WiFi connection with ID and DEVICE-PATH."
+  (let* ((ap-path (when device-path
+                    (nm-device-wireless-get-active-access-point device-path)))
+         (strength (when ap-path
+                     (nm-access-point-get-strength ap-path))))
+    (format "%s %s%s"
+            (nm-modeline-get-icon 'wifi strength)
+            id
+            (if strength (format " %d%%" strength) ""))))
+
+(defun nm-modeline-format-vpn-status (active-conns)
+  "Format VPN status from ACTIVE-CONNS."
+  (when nm-modeline-show-vpn
+    (let ((vpn-active (seq-find (lambda (conn) (cdr (assoc 'vpn conn))) active-conns)))
+      (when vpn-active
+        (format "%s VPN" (nm-modeline-get-icon 'vpn))))))
+
+(defun nm-modeline-format-status ()
+  "Format current network status for modeline."
+  (condition-case nil
+      (let* ((primary-info (nm-modeline-get-primary-info))
+             (active-conns (nm-active-connections-info))
+             status-parts)
+        
+        (if primary-info
+            (let* ((type (plist-get primary-info :type))
+                   (id (plist-get primary-info :id))
+                   (device-path (plist-get primary-info :device-path))
+                   (device-info (when device-path (nm-device-info device-path))))
+              
+              (pcase type
+                ("802-3-ethernet"
+                 (push (nm-modeline-format-ethernet device-info) status-parts))
+                
+                ("802-11-wireless"
+                 (push (nm-modeline-format-wifi id device-path) status-parts))
+                
+                (_
+                 (push (format "%s %s" type id) status-parts)))
+              
+              (let ((vpn-status (nm-modeline-format-vpn-status active-conns)))
+                (when vpn-status
+                  (push vpn-status status-parts))))
+          
+          (push (format "%s Offline" (nm-modeline-get-icon 'disconnected)) status-parts))
+        
+        (mapconcat #'identity status-parts " "))
+    (error "")))
+
+(defun nm-modeline-update ()
+  "Update modeline string."
+  (setq nm-modeline-string
+        (format nm-modeline-format (nm-modeline-format-status)))
+  (force-mode-line-update t))
+
+(defun nm-modeline-start ()
+  "Start modeline updates."
+  (when nm-modeline-timer
+    (cancel-timer nm-modeline-timer))
+  (nm-modeline-update)
+  (setq nm-modeline-timer
+        (run-with-timer nm-modeline-refresh-interval
+                        nm-modeline-refresh-interval
+                        #'nm-modeline-update)))
+
+(defun nm-modeline-stop ()
+  "Stop modeline updates."
+  (when nm-modeline-timer
+    (cancel-timer nm-modeline-timer)
+    (setq nm-modeline-timer nil))
+  (setq nm-modeline-string "")
+  (force-mode-line-update t))
+
+;;;###autoload
+(define-minor-mode nm-modeline-mode
+  "Toggle NetworkManager modeline indicator."
+  :global t
+  :group 'nm-modeline
+  (if nm-modeline-mode
+      (progn
+        (add-to-list 'global-mode-string '(:eval nm-modeline-string) t)
+        (nm-modeline-start))
+    (nm-modeline-stop)
+    (setq global-mode-string (delete '(:eval nm-modeline-string) global-mode-string))))
+
+(provide 'nm-modeline)
+;;; nm-modeline.el ends here

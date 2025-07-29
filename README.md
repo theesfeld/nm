@@ -10,6 +10,8 @@ A comprehensive NetworkManager interface for Emacs, providing complete control o
 - **Device Management**: Control network interfaces and their states
 - **Connection Profiles**: Create, edit, and manage network connections
 - **Interactive UI**: User-friendly interface with real-time updates
+- **Connection Editor**: Create and edit connections with interactive forms
+- **Modeline Indicator**: Optional modeline display of connection status
 - **Auto-refresh**: Automatic status updates with configurable interval
 - **Security**: Support for WPA/WPA2/WPA3 and various VPN protocols
 - **which-key Support**: Enhanced keybinding discovery with which-key integration
@@ -32,6 +34,8 @@ A comprehensive NetworkManager interface for Emacs, providing complete control o
   :config
   (setq nm-auto-refresh t
         nm-refresh-interval 5)
+  ;; Optional: Enable modeline indicator
+  (nm-modeline-mode 1)
   :bind-keymap
   ("C-c N" . nm-prefix-map))
 ```
@@ -79,6 +83,19 @@ All customizable variables with their default values:
 | `nm-settings-path`    | `"/org/freedesktop/NetworkManager/Settings"` | D-Bus object path for NetworkManager Settings   |
 | `nm-auto-refresh`     | `t`                                          | Whether to automatically refresh network status |
 | `nm-refresh-interval` | `5`                                          | Interval in seconds for automatic refresh       |
+
+### Modeline Indicator Options
+
+| Variable                       | Default | Description                           |
+|--------------------------------|---------|---------------------------------------|
+| `nm-modeline-format`           | `" %s"` | Format string for modeline display    |
+| `nm-modeline-refresh-interval` | `5`     | Refresh interval in seconds           |
+| `nm-modeline-show-vpn`         | `t`     | Whether to show VPN status            |
+| `nm-modeline-disconnected-icon`| `"⚠"`   | Icon when disconnected                |
+| `nm-modeline-ethernet-icon`    | `"🖧"`   | Icon for ethernet connection          |
+| `nm-modeline-wifi-icon`        | `"📶"`  | Icon for WiFi connection              |
+| `nm-modeline-vpn-icon`         | `"🔒"`   | Icon for VPN connection               |
+| `nm-modeline-use-nerd-fonts`   | `nil`   | Use Nerd Font icons instead of emoji  |
 
 ## Usage
 
@@ -382,6 +399,7 @@ Key bindings:
 | `a`   | `nm-ui-activate-connection`   | Activate connection      |
 | `d`   | `nm-ui-deactivate-connection` | Deactivate connection    |
 | `e`   | `nm-ui-edit-connection`       | Edit connection          |
+| `+`   | `nm-ui-new-connection`        | Create new connection    |
 | `D`   | `nm-ui-delete-connection`     | Delete connection        |
 | `s`   | `nm-status`                   | Show status              |
 | `n`   | `nm-toggle-networking`        | Toggle networking on/off |
@@ -578,6 +596,36 @@ Key functions:
 - `nm-ui-connections`: Open connection manager
 - `nm-ui-refresh`: Refresh current view
 - `nm-ui-password-prompt`: Secure password input
+
+### nm-modeline.el - Modeline Indicator
+
+Optional modeline indicator showing:
+- Current connection status
+- Connection type (Ethernet/WiFi/VPN)
+- WiFi signal strength
+- VPN status indication
+- Customizable icons (emoji or Nerd Fonts)
+
+Enable the modeline indicator:
+```elisp
+;; Enable modeline indicator
+(nm-modeline-mode 1)
+
+;; Use Nerd Font icons instead of emoji
+(setq nm-modeline-use-nerd-fonts t)
+
+;; Customize refresh interval
+(setq nm-modeline-refresh-interval 10)
+
+;; Hide VPN status
+(setq nm-modeline-show-vpn nil)
+```
+
+The modeline will display:
+- `⚠ Offline` - No network connection
+- `🖧 eth0` - Ethernet connection
+- `📶 MyWiFi 85%` - WiFi with signal strength
+- `🔒 VPN` - Active VPN connection
 
 ## Troubleshooting
 

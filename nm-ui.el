@@ -27,12 +27,13 @@
 (require 'nm-connection)
 (require 'nm-wifi)
 (require 'nm-vpn)
-(require 'tabulated-list)
 (require 'widget)
 (require 'wid-edit)
+(require 'tabulated-list)
 
 (declare-function nm-show-help "nm" ())
 (declare-function nm-reload "nm" (&optional flags))
+(declare-function nm-generate-uuid "nm-connection" ())
 
 (defvar nm-ui-buffer-name "*NetworkManager*"
   "Name of the NetworkManager UI buffer.")
@@ -327,48 +328,6 @@
     (when network
       (nm-wifi-forget-network (cdr (assoc 'ssid network))))))
 
-(defun nm-ui-activate-connection ()
-  "Activate connection at point."
-  (interactive)
-  (let ((connection (get-text-property (point) 'nm-connection)))
-    (when connection
-      (let ((devices (nm-get-devices)))
-        (nm-activate-connection (cdr (assoc 'path connection))
-                                (or (car devices) "/")
-                                "/")))))
-
-(defun nm-ui-deactivate-connection ()
-  "Deactivate connection at point."
-  (interactive)
-  (let ((connection (get-text-property (point) 'nm-connection)))
-    (when connection
-      (let ((active-conns (nm-active-connections-info)))
-        (when-let ((active (seq-find (lambda (conn)
-                                       (equal (cdr (assoc 'uuid conn))
-                                              (cdr (assoc 'uuid connection))))
-                                     active-conns)))
-          (nm-deactivate-connection (cdr (assoc 'path active))))))))
-
-(defun nm-ui-edit-connection ()
-  "Edit connection at point."
-  (interactive)
-  (let ((connection (get-text-property (point) 'nm-connection)))
-    (when connection
-      (let ((buffer (get-buffer-create nm-ui-connection-buffer-name)))
-        (with-current-buffer buffer
-          (nm-ui-connection-mode)
-          (nm-ui-create-connection-form connection))
-        (switch-to-buffer buffer)))))
-
-(defun nm-ui-delete-connection ()
-  "Delete connection at point."
-  (interactive)
-  (let ((connection (get-text-property (point) 'nm-connection)))
-    (when (and connection
-               (yes-or-no-p (format "Delete connection %s? "
-                                    (cdr (assoc 'id connection)))))
-      (nm-connection-delete (cdr (assoc 'path connection)))
-      (nm-ui-refresh))))
 
 (defun nm-ui-scan-wifi ()
   "Scan for WiFi networks."
@@ -492,6 +451,7 @@
         "a" "activate"
         "d" "deactivate"
         "e" "edit"
+        "+" "new connection"
         "D" "delete"
         "s" "show status"
         "n" "toggle networking"
@@ -580,6 +540,7 @@
     (define-key map "a" #'nm-ui-activate-connection)
     (define-key map "d" #'nm-ui-deactivate-connection)
     (define-key map "e" #'nm-ui-edit-connection)
+    (define-key map "+" #'nm-ui-new-connection)
     (define-key map "D" #'nm-ui-delete-connection)
     (define-key map "s" #'nm-status)
     (define-key map "n" #'nm-toggle-networking)
@@ -714,6 +675,211 @@
       (let ((start (point)))
         (insert (nm-ui-format-device-line device))
         (put-text-property start (point) 'nm-device device)))))
+
+(defun nm-ui-activate-connection ()
+  "Activate connection at point."
+  (interactive)
+  (let ((connection (get-text-property (point) 'nm-connection)))
+    (when connection
+      (condition-case err
+          (progn
+            (nm-activate-connection (cdr (assoc 'path connection)) "/" "/")
+            (message "Activating connection: %s" (cdr (assoc 'id connection))))
+        (error (message "Error activating connection: %s" (error-message-string err)))))))
+
+(defun nm-ui-deactivate-connection ()
+  "Deactivate connection at point."
+  (interactive)
+  (let ((connection (get-text-property (point) 'nm-connection)))
+    (when connection
+      (let ((active-conns (nm-active-connections-info)))
+        (let ((active (seq-find (lambda (conn)
+                                  (equal (cdr (assoc 'uuid conn))
+                                         (cdr (assoc 'uuid connection))))
+                                active-conns)))
+          (if active
+              (progn
+                (nm-deactivate-connection (cdr (assoc 'path active)))
+                (message "Deactivated connection: %s" (cdr (assoc 'id connection))))
+            (message "Connection is not active")))))))
+
+(defun nm-ui-delete-connection ()
+  "Delete connection at point."
+  (interactive)
+  (let ((connection (get-text-property (point) 'nm-connection)))
+    (when connection
+      (when (yes-or-no-p (format "Delete connection '%s'? " (cdr (assoc 'id connection))))
+        (condition-case err
+            (progn
+              (nm-connection-delete (cdr (assoc 'path connection)))
+              (message "Deleted connection: %s" (cdr (assoc 'id connection)))
+              (nm-ui-refresh))
+          (error (message "Error deleting connection: %s" (error-message-string err))))))))
+
+(defun nm-ui-edit-connection ()
+  "Edit connection at point."
+  (interactive)
+  (let ((connection (get-text-property (point) 'nm-connection)))
+    (when connection
+      (nm-ui-edit-connection-form connection))))
+
+(defun nm-ui-new-connection ()
+  "Create a new connection."
+  (interactive)
+  (nm-ui-edit-connection-form nil))
+
+(defun nm-ui-create-form-widgets (settings)
+  "Create basic form widgets for connection SETTINGS."
+  (let* ((conn-settings (cdr (assoc "connection" settings)))
+         (name-widget (widget-create 'editable-field
+                                     :size 30
+                                     :format "Name: %v\n"
+                                     :value (or (cdr (assoc "id" conn-settings)) "")))
+         (type-widget (widget-create 'menu-choice
+                                     :tag "Type"
+                                     :value (or (cdr (assoc "type" conn-settings)) "802-3-ethernet")
+                                     :notify (lambda (widget &rest ignore)
+                                               (nm-ui-update-connection-form widget))
+                                     '(item :tag "Ethernet" :value "802-3-ethernet")
+                                     '(item :tag "WiFi" :value "802-11-wireless")
+                                     '(item :tag "VPN (OpenVPN)" :value "vpn")))
+         (autoconnect-widget (widget-create 'checkbox
+                                            :value (if conn-settings
+                                                       (cdr (assoc "autoconnect" conn-settings))
+                                                     t))))
+    (list name-widget type-widget autoconnect-widget)))
+
+(defun nm-ui-create-wifi-widgets (settings)
+  "Create WiFi-specific widgets for SETTINGS."
+  (let ((wifi-settings (cdr (assoc "802-11-wireless" settings))))
+    (list (cons 'ssid (widget-create 'editable-field
+                                     :size 30
+                                     :format "SSID: %v\n"
+                                     :value (or (when wifi-settings
+                                                  (nm-dbus-ssid-to-string
+                                                   (cdr (assoc "ssid" wifi-settings))))
+                                                "")))
+          (cons 'password (widget-create 'password-field
+                                         :size 30
+                                         :format "Password: %v\n"
+                                         :value "")))))
+
+(defun nm-ui-create-vpn-widgets ()
+  "Create VPN-specific widgets."
+  (list (cons 'vpn-type (widget-create 'menu-choice
+                                       :tag "VPN Type"
+                                       :value "openvpn"
+                                       '(item :tag "OpenVPN" :value "openvpn")
+                                       '(item :tag "WireGuard" :value "wireguard")
+                                       '(item :tag "L2TP" :value "l2tp")))))
+
+(defun nm-ui-setup-connection-form-buffer (connection)
+  "Setup connection form buffer for CONNECTION."
+  (kill-all-local-variables)
+  (let ((inhibit-read-only t))
+    (erase-buffer))
+  (remove-overlays)
+  (widget-insert (if connection
+                     (format "Edit Connection: %s\n\n" (cdr (assoc 'id connection)))
+                   "New Connection\n\n")))
+
+(defun nm-ui-edit-connection-form (connection)
+  "Edit CONNECTION or create new if nil."
+  (let ((buffer (get-buffer-create "*NetworkManager Connection Editor*")))
+    (with-current-buffer buffer
+      (nm-ui-setup-connection-form-buffer connection)
+      
+      (let* ((settings (when connection
+                         (nm-dbus-connection-settings-to-alist
+                          (nm-connection-get-settings (cdr (assoc 'path connection))))))
+             (basic-widgets (nm-ui-create-form-widgets settings))
+             (name-widget (nth 0 basic-widgets))
+             (type-widget (nth 1 basic-widgets))
+             (autoconnect-widget (nth 2 basic-widgets))
+             extra-widgets)
+        
+        (widget-insert "\n")
+        (widget-insert "Autoconnect: ")
+        (widget-insert "\n\n")
+        
+        (cond
+         ((equal (widget-value type-widget) "802-11-wireless")
+          (setq extra-widgets (nm-ui-create-wifi-widgets settings)))
+         ((equal (widget-value type-widget) "vpn")
+          (setq extra-widgets (nm-ui-create-vpn-widgets))))
+        
+        (widget-insert "\n")
+        (widget-create 'push-button
+                       :notify (lambda (&rest ignore)
+                                 (nm-ui-save-connection connection
+                                                        name-widget
+                                                        type-widget
+                                                        autoconnect-widget
+                                                        extra-widgets))
+                       "Save")
+        (widget-insert " ")
+        (widget-create 'push-button
+                       :notify (lambda (&rest ignore)
+                                 (kill-buffer))
+                       "Cancel")
+        
+        (use-local-map widget-keymap)
+        (widget-setup)
+        (goto-char (point-min))
+        (widget-forward 1)))
+    (switch-to-buffer buffer)))
+
+(defun nm-ui-save-connection (connection name-widget type-widget autoconnect-widget extra-widgets)
+  "Save connection with values from widgets."
+  (let* ((name (widget-value name-widget))
+         (type (widget-value type-widget))
+         (autoconnect (widget-value autoconnect-widget))
+         (uuid (or (when connection (cdr (assoc 'uuid connection)))
+                   (nm-generate-uuid)))
+         (settings `(("connection" . (("id" . ,name)
+                                      ("uuid" . ,uuid)
+                                      ("type" . ,type)
+                                      ("autoconnect" . ,autoconnect))))))
+    
+    ;; Add type-specific settings
+    (cond
+     ((equal type "802-11-wireless")
+      (let ((ssid (widget-value (cdr (assoc 'ssid extra-widgets))))
+            (password (widget-value (cdr (assoc 'password extra-widgets)))))
+        (push `("802-11-wireless" . (("ssid" . ,(nm-dbus-string-to-ssid ssid))
+                                      ("mode" . "infrastructure")))
+              settings)
+        (when (and password (> (length password) 0))
+          (push `("802-11-wireless-security" . (("key-mgmt" . "wpa-psk")
+                                                 ("psk" . ,password)))
+                settings))))
+     
+     ((equal type "vpn")
+      (let ((vpn-type (widget-value (cdr (assoc 'vpn-type extra-widgets)))))
+        (push `("vpn" . (("service-type" . ,(format "org.freedesktop.NetworkManager.%s" vpn-type))))
+              settings))))
+    
+    ;; Add IPv4/IPv6 settings
+    (push '("ipv4" . (("method" . "auto"))) settings)
+    (push '("ipv6" . (("method" . "auto"))) settings)
+    
+    (condition-case err
+        (if connection
+            (progn
+              (nm-connection-update (cdr (assoc 'path connection))
+                                    (nm-dbus-alist-to-connection-settings settings))
+              (message "Updated connection: %s" name))
+          (nm-add-connection (nm-dbus-alist-to-connection-settings settings))
+          (message "Created connection: %s" name))
+      (error (message "Error saving connection: %s" (error-message-string err))))
+    
+    (kill-buffer)
+    (nm-ui-refresh)))
+
+(defun nm-ui-update-connection-form (widget)
+  "Update connection form based on type selection."
+  (let ((type (widget-value widget)))
+    (message "Connection type changed to: %s" type)))
 
 (defun nm-ui-activate-ethernet-device ()
   "Activate ethernet device at point."

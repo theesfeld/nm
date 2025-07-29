@@ -273,7 +273,21 @@
   "Setup global keybindings for NetworkManager."
   (global-set-key (kbd "C-c N") nm-prefix-map))
 
-(nm-setup-global-keybindings)
+;;;###autoload
+(defun nm-initialize-keybindings ()
+  "Initialize NetworkManager global keybindings."
+  (nm-setup-global-keybindings))
+
+;;;###autoload
+(add-hook 'after-init-hook #'nm-initialize-keybindings)
+
+;;;###autoload
+(defun nm-modeline-mode (&optional arg)
+  "Toggle NetworkManager modeline indicator.
+With ARG, enable if positive, disable otherwise."
+  (interactive (list (or current-prefix-arg 'toggle)))
+  (require 'nm-modeline)
+  (nm-modeline-mode arg))
 
 (provide 'nm)
 ;;; nm.el ends here
