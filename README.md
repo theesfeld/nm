@@ -19,6 +19,48 @@ A comprehensive NetworkManager interface for Emacs, providing complete control o
 - **Export/Import**: Backup and restore connection profiles
 - **which-key Support**: Enhanced keybinding discovery with which-key integration
 
+## Recent Enhancements
+
+### Version 0.4.0 - Major UI Overhaul
+
+This version introduces significant improvements to the user interface and experience:
+
+#### Tabulated Interface
+- Complete migration from text-based UI to `tabulated-list-mode` for all views
+- Consistent, sortable columns with proper alignment
+- Better keyboard navigation and standard Emacs list interactions
+
+#### Visual Enhancements
+- **Color-coded signal strength indicators**:
+  - Excellent (75-100%): Green, bold
+  - Good (50-74%): Lime green
+  - Fair (25-49%): Yellow
+  - Poor (0-24%): Orange red
+- **Security indicators**: Open networks shown in red
+- **Device state colors**: Connected (green), disconnected (gray), unavailable (red)  
+- **Active connection highlighting**: Active connections shown in green
+
+#### New Dashboard View
+- Comprehensive overview accessible via `C-c N u`
+- Shows system state, connectivity, and active connections
+- Quick access to all NetworkManager functions
+- Real-time status updates
+
+#### Enhanced Modeline
+- New tooltips showing connection details on hover
+- Option to display icons only without connection names
+- Improved formatting for all connection types
+
+#### Interactive Elements
+- Clickable buttons in connections list for New/Edit/Delete actions
+- Better integration with mouse interactions
+- Improved keyboard shortcuts across all modes
+
+#### Auto-refresh Improvements
+- Proper timer management for all tabulated modes
+- Automatic cleanup when buffers are killed
+- Configurable refresh intervals
+
 ## Requirements
 
 - Emacs 30.1 or later
@@ -111,7 +153,7 @@ Then add to your Emacs configuration:
 After installation, you can quickly access NetworkManager features:
 
 1. **Check status**: `C-c N s` - Shows NetworkManager status
-2. **Open dashboard**: `C-c N u` - Opens the main UI
+2. **Open dashboard**: `C-c N u` - Opens the NetworkManager dashboard
 3. **Browse WiFi**: `C-c N W` - Opens WiFi browser and starts scanning
 4. **Manage connections**: `C-c N c` - Opens connection manager
 5. **Help**: `C-c N ?` - Shows all available keybindings
@@ -140,6 +182,7 @@ All customizable variables with their default values:
 |--------------------------------|---------|---------------------------------------|
 | `nm-modeline-format`           | `" %s"` | Format string for modeline display    |
 | `nm-modeline-refresh-interval` | `5`     | Refresh interval in seconds           |
+| `nm-modeline-show-connection-name` | `t` | Show connection name or icon only     |
 | `nm-modeline-show-vpn`         | `t`     | Whether to show VPN status            |
 | `nm-modeline-disconnected-icon`| `"⚠"`   | Icon when disconnected                |
 | `nm-modeline-ethernet-icon`    | `"🖧"`   | Icon for ethernet connection          |
@@ -403,7 +446,7 @@ After loading the package, all commands are available under `C-c N`:
 | `C-c N s` | `nm-status`              | Show NetworkManager status     |
 | `C-c N n` | `nm-toggle-networking`   | Toggle networking on/off       |
 | `C-c N w` | `nm-toggle-wireless`     | Toggle wireless on/off         |
-| `C-c N u` | `nm-ui`                  | Open main UI dashboard         |
+| `C-c N u` | `nm-ui-dashboard`        | Open NetworkManager dashboard  |
 | `C-c N W` | `nm-ui-wifi`             | Open WiFi browser              |
 | `C-c N E` | `nm-ui-ethernet`         | Open Ethernet browser          |
 | `C-c N d` | `nm-ui-devices`          | Open device list               |
@@ -829,6 +872,9 @@ Enable the modeline indicator:
 
 ;; Hide VPN status
 (setq nm-modeline-show-vpn nil)
+
+;; Show only icons without connection names
+(setq nm-modeline-show-connection-name nil)
 ```
 
 The modeline will display:
@@ -836,6 +882,9 @@ The modeline will display:
 - `🖧 eth0` - Ethernet connection
 - `📶 MyWiFi 85%` - WiFi with signal strength
 - `🔒 VPN` - Active VPN connection
+
+When `nm-modeline-show-connection-name` is set to `nil`, only icons are displayed.
+Hover over the modeline indicator to see full connection details in a tooltip.
 
 ### nm-notify.el - Desktop Notifications
 

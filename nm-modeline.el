@@ -48,6 +48,12 @@
   :type 'integer
   :group 'nm-modeline)
 
+(defcustom nm-modeline-show-connection-name t
+  "Whether to show connection name in modeline.
+When nil, only the connection icon is displayed."
+  :type 'boolean
+  :group 'nm-modeline)
+
 (defcustom nm-modeline-show-vpn t
   "Whether to show VPN status in modeline."
   :type 'boolean
@@ -134,6 +140,20 @@
       ('vpn nm-modeline-vpn-icon)
       (_ "?"))))
 
+(defun nm-modeline-build-tooltip (type id device-info strength)
+  "Build tooltip text for connection TYPE with ID, DEVICE-INFO and signal STRENGTH."
+  (pcase type
+    ("802-3-ethernet"
+     (format "Ethernet: %s" (or (cdr (assoc 'interface device-info)) id)))
+    ("802-11-wireless"
+     (if strength
+         (format "WiFi: %s (%d%%)" id strength)
+       (format "WiFi: %s" id)))
+    ("vpn"
+     (format "VPN: %s" id))
+    (_
+     (format "%s: %s" type id))))
+
 (defun nm-modeline-get-primary-info ()
   "Get primary connection information."
   (let ((primary-path (nm-get-primary-connection)))
@@ -146,29 +166,44 @@
                 :id (cdr (assoc 'id primary-conn))
                 :device-path (car (cdr (assoc 'devices primary-conn)))))))))
 
-(defun nm-modeline-format-ethernet (device-info)
-  "Format ethernet connection with DEVICE-INFO."
-  (format "%s %s" 
-          (nm-modeline-get-icon 'ethernet)
-          (or (cdr (assoc 'interface device-info)) "eth")))
+(defun nm-modeline-format-ethernet (id device-info)
+  "Format ethernet connection with ID and DEVICE-INFO."
+  (let* ((interface (or (cdr (assoc 'interface device-info)) id))
+         (icon (nm-modeline-get-icon 'ethernet))
+         (tooltip (nm-modeline-build-tooltip "802-3-ethernet" interface device-info nil))
+         (display-text (if nm-modeline-show-connection-name
+                           (format "%s %s" icon interface)
+                         icon)))
+    (propertize display-text 'help-echo tooltip)))
 
 (defun nm-modeline-format-wifi (id device-path)
   "Format WiFi connection with ID and DEVICE-PATH."
   (let* ((ap-path (when device-path
                     (nm-device-wireless-get-active-access-point device-path)))
          (strength (when ap-path
-                     (nm-access-point-get-strength ap-path))))
-    (format "%s %s%s"
-            (nm-modeline-get-icon 'wifi strength)
-            id
-            (if strength (format " %d%%" strength) ""))))
+                     (nm-access-point-get-strength ap-path)))
+         (icon (nm-modeline-get-icon 'wifi strength))
+         (tooltip (nm-modeline-build-tooltip "802-11-wireless" id nil strength))
+         (display-text (if nm-modeline-show-connection-name
+                           (format "%s %s%s"
+                                   icon
+                                   id
+                                   (if strength (format " %d%%" strength) ""))
+                         icon)))
+    (propertize display-text 'help-echo tooltip)))
 
 (defun nm-modeline-format-vpn-status (active-conns)
   "Format VPN status from ACTIVE-CONNS."
   (when nm-modeline-show-vpn
     (let ((vpn-active (seq-find (lambda (conn) (cdr (assoc 'vpn conn))) active-conns)))
       (when vpn-active
-        (format "%s VPN" (nm-modeline-get-icon 'vpn))))))
+        (let* ((vpn-id (cdr (assoc 'id vpn-active)))
+               (icon (nm-modeline-get-icon 'vpn))
+               (tooltip (nm-modeline-build-tooltip "vpn" vpn-id nil nil))
+               (display-text (if nm-modeline-show-connection-name
+                                 (format "%s %s" icon vpn-id)
+                               icon)))
+          (propertize display-text 'help-echo tooltip))))))
 
 (defun nm-modeline-format-status ()
   "Format current network status for modeline."
@@ -185,19 +220,29 @@
               
               (pcase type
                 ("802-3-ethernet"
-                 (push (nm-modeline-format-ethernet device-info) status-parts))
+                 (push (nm-modeline-format-ethernet id device-info) status-parts))
                 
                 ("802-11-wireless"
                  (push (nm-modeline-format-wifi id device-path) status-parts))
                 
                 (_
-                 (push (format "%s %s" type id) status-parts)))
+                 (let* ((icon (nm-modeline-get-icon 'ethernet))
+                        (tooltip (format "%s: %s" type id))
+                        (display-text (if nm-modeline-show-connection-name
+                                          (format "%s %s" icon id)
+                                        icon)))
+                   (push (propertize display-text 'help-echo tooltip) status-parts))))
               
               (let ((vpn-status (nm-modeline-format-vpn-status active-conns)))
                 (when vpn-status
                   (push vpn-status status-parts))))
           
-          (push (format "%s Offline" (nm-modeline-get-icon 'disconnected)) status-parts))
+          (let* ((icon (nm-modeline-get-icon 'disconnected))
+                 (tooltip "Network: Offline")
+                 (display-text (if nm-modeline-show-connection-name
+                                   (format "%s Offline" icon)
+                                 icon)))
+            (push (propertize display-text 'help-echo tooltip) status-parts)))
         
         (mapconcat #'identity status-parts " "))
     (error "")))

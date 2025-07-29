@@ -23,10 +23,9 @@
 ;;; Code:
 
 (require 'dbus)
-(declare-function nm-ui-ethernet-internal "nm-ui" ())
-(declare-function nm-ui-devices-internal "nm-ui" ())
 (declare-function nm-vpn-activate "nm-vpn" (vpn-name))
 (declare-function nm-vpn-deactivate-all "nm-vpn" ())
+(declare-function nm-ui-dashboard "nm-ui-tabulated" ())
 (declare-function nm-ui-wifi-list "nm-ui-tabulated" ())
 (declare-function nm-ui-connections-list "nm-ui-tabulated" ())
 (declare-function nm-ui-devices-list "nm-ui-tabulated" ())
@@ -222,11 +221,11 @@
     (define-key map "s" #'nm-status)
     (define-key map "n" #'nm-toggle-networking)
     (define-key map "w" #'nm-toggle-wireless)
-    (define-key map "u" #'nm-ui)
-    (define-key map "W" #'nm-ui-wifi)
-    (define-key map "E" #'nm-ui-ethernet)
-    (define-key map "d" #'nm-ui-devices)
-    (define-key map "c" #'nm-ui-connections)
+    (define-key map "u" #'nm-ui-dashboard)
+    (define-key map "W" #'nm-ui-wifi-list)
+    (define-key map "E" #'nm-ui-devices-list)
+    (define-key map "d" #'nm-ui-devices-list)
+    (define-key map "c" #'nm-ui-connections-list)
     (define-key map "v" #'nm-vpn-activate)
     (define-key map "V" #'nm-vpn-deactivate-all)
     (define-key map "r" #'nm-reload)
@@ -266,23 +265,7 @@
 (with-eval-after-load 'which-key
   (nm-setup-which-key))
 
-;;;###autoload
-(defun nm-ui-ethernet ()
-  "Open NetworkManager Ethernet browser."
-  (interactive)
-  (unless (nm-available-p)
-    (error "NetworkManager service not available"))
-  (require 'nm-ui)
-  (nm-ui-ethernet-internal))
 
-;;;###autoload
-(defun nm-ui-devices ()
-  "Open NetworkManager device list."
-  (interactive)
-  (unless (nm-available-p)
-    (error "NetworkManager service not available"))
-  (require 'nm-ui)
-  (nm-ui-devices-internal))
 
 (defun nm-setup-global-keybindings ()
   "Setup global keybindings for NetworkManager."

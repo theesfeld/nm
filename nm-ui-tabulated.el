@@ -28,6 +28,42 @@
 (require 'nm-connection)
 (require 'nm-ui)
 
+(defface nm-ui-signal-excellent
+  '((t :foreground "green" :weight bold))
+  "Face for excellent signal strength (75-100%).")
+
+(defface nm-ui-signal-good
+  '((t :foreground "lime green"))
+  "Face for good signal strength (50-74%).")
+
+(defface nm-ui-signal-fair
+  '((t :foreground "yellow"))
+  "Face for fair signal strength (25-49%).")
+
+(defface nm-ui-signal-poor
+  '((t :foreground "orange red"))
+  "Face for poor signal strength (0-24%).")
+
+(defface nm-ui-open-network
+  '((t :foreground "red" :weight bold))
+  "Face for open (unsecured) networks.")
+
+(defface nm-ui-active-connection
+  '((t :foreground "green" :weight bold))
+  "Face for active connections.")
+
+(defface nm-ui-device-connected
+  '((t :foreground "green"))
+  "Face for connected devices.")
+
+(defface nm-ui-device-disconnected
+  '((t :foreground "dim gray"))
+  "Face for disconnected devices.")
+
+(defface nm-ui-device-unavailable
+  '((t :foreground "red"))
+  "Face for unavailable devices.")
+
 (defvar nm-ui-wifi-list-format
   [("" 5 nil) ;; Signal bars
    ("SSID" 25 t)
@@ -53,13 +89,27 @@
    ("Managed" 8 t)]
   "Format for devices list columns.")
 
+(defvar-local nm-ui-wifi-list-timer nil
+  "Timer for auto-refresh in WiFi list mode.")
+
 (define-derived-mode nm-ui-wifi-list-mode tabulated-list-mode "NM-WiFi"
   "Major mode for WiFi network list."
   (setq tabulated-list-format nm-ui-wifi-list-format)
   (setq tabulated-list-padding 2)
   (setq tabulated-list-sort-key '("Strength" . t))
   (add-hook 'tabulated-list-revert-hook #'nm-ui-wifi-list-refresh nil t)
-  (tabulated-list-init-header))
+  (tabulated-list-init-header)
+  (when nm-auto-refresh
+    (setq nm-ui-wifi-list-timer
+          (run-with-timer nm-refresh-interval nm-refresh-interval
+                          (lambda ()
+                            (when (eq major-mode 'nm-ui-wifi-list-mode)
+                              (nm-ui-wifi-list-refresh))))))
+  (add-hook 'kill-buffer-hook
+            (lambda ()
+              (when nm-ui-wifi-list-timer
+                (cancel-timer nm-ui-wifi-list-timer)))
+            nil t))
 
 (defvar nm-ui-wifi-list-mode-map
   (let ((map (make-sparse-keymap)))
@@ -78,10 +128,10 @@
 
 (defun nm-ui-wifi-list-refresh ()
   "Refresh WiFi network list."
-  (let ((networks (nm-wifi-get-all-access-points))
-        (current-conn (nm-wifi-get-current-connection))
-        (current-ssid (when current-conn (cdr (assoc 'id current-conn))))
-        entries)
+  (let* ((networks (nm-wifi-get-all-access-points))
+         (current-conn (nm-wifi-get-current-connection))
+         (current-ssid (when current-conn (cdr (assoc 'id current-conn))))
+         entries)
     (dolist (network networks)
       (when-let ((ssid (cdr (assoc 'ssid network))))
         (unless (string-empty-p ssid)
@@ -91,15 +141,22 @@
                  (bssid (cdr (assoc 'bssid network)))
                  (bars (nm-wifi-strength-bars strength))
                  (id network)
+                 (strength-face (cond ((>= strength 75) 'nm-ui-signal-excellent)
+                                      ((>= strength 50) 'nm-ui-signal-good)
+                                      ((>= strength 25) 'nm-ui-signal-fair)
+                                      (t 'nm-ui-signal-poor)))
                  (ssid-display (if (equal ssid current-ssid)
-                                   (propertize ssid 'face 'success)
-                                 ssid)))
+                                   (propertize ssid 'face 'nm-ui-active-connection)
+                                 ssid))
+                 (security-display (if (string= security "Open")
+                                       (propertize security 'face 'nm-ui-open-network)
+                                     security)))
             (push (list id
-                        (vector bars
+                        (vector (propertize bars 'face strength-face)
                                 ssid-display
                                 (format "%d" channel)
-                                security
-                                (format "%d%%" strength)
+                                security-display
+                                (propertize (format "%d%%" strength) 'face strength-face)
                                 bssid))
                   entries)))))
     (setq tabulated-list-entries (nreverse entries))
@@ -153,13 +210,27 @@
       (nm-ui-scan-wifi))
     (switch-to-buffer buffer)))
 
+(defvar-local nm-ui-connections-list-timer nil
+  "Timer for auto-refresh in connections list mode.")
+
 (define-derived-mode nm-ui-connections-list-mode tabulated-list-mode "NM-Connections"
   "Major mode for connection list."
   (setq tabulated-list-format nm-ui-connections-list-format)
   (setq tabulated-list-padding 2)
   (setq tabulated-list-sort-key '("Name" . nil))
   (add-hook 'tabulated-list-revert-hook #'nm-ui-connections-list-refresh nil t)
-  (tabulated-list-init-header))
+  (tabulated-list-init-header)
+  (when nm-auto-refresh
+    (setq nm-ui-connections-list-timer
+          (run-with-timer nm-refresh-interval nm-refresh-interval
+                          (lambda ()
+                            (when (eq major-mode 'nm-ui-connections-list-mode)
+                              (nm-ui-connections-list-refresh))))))
+  (add-hook 'kill-buffer-hook
+            (lambda ()
+              (when nm-ui-connections-list-timer
+                (cancel-timer nm-ui-connections-list-timer)))
+            nil t))
 
 (defvar nm-ui-connections-list-mode-map
   (let ((map (make-sparse-keymap)))
@@ -179,7 +250,8 @@
   "Refresh connections list."
   (let ((connections (nm-connections-info))
         (active-conns (nm-active-connections-info))
-        entries)
+        entries
+        (inhibit-read-only t))
     (dolist (conn connections)
       (let* ((id (cdr (assoc 'id conn)))
              (uuid (cdr (assoc 'uuid conn)))
@@ -197,7 +269,7 @@
                        "")))
         (push (list conn
                     (vector (if active
-                                (propertize id 'face 'success)
+                                (propertize id 'face 'nm-ui-active-connection)
                               id)
                             type
                             status
@@ -205,7 +277,28 @@
                             device))
               entries)))
     (setq tabulated-list-entries (nreverse entries))
-    (tabulated-list-print t)))
+    (tabulated-list-print t)
+    (save-excursion
+      (goto-char (point-min))
+      (forward-line 2)
+      (let ((start (point)))
+        (insert "\n ")
+        (insert-button "[ New Connection ]"
+                       'action (lambda (_) (nm-ui-new-connection))
+                       'follow-link t
+                       'help-echo "Create a new network connection")
+        (insert "  ")
+        (insert-button "[ Edit ]"
+                       'action (lambda (_) (nm-ui-connections-list-edit))
+                       'follow-link t
+                       'help-echo "Edit the connection at point")
+        (insert "  ")
+        (insert-button "[ Delete ]"
+                       'action (lambda (_) (nm-ui-connections-list-delete))
+                       'follow-link t
+                       'help-echo "Delete the connection at point")
+        (insert "\n\n")
+        (put-text-property start (point) 'read-only t)))))
 
 (defun nm-ui-connections-list-activate ()
   "Activate connection at point."
@@ -259,12 +352,26 @@
       (nm-ui-connections-list-refresh))
     (switch-to-buffer buffer)))
 
+(defvar-local nm-ui-devices-list-timer nil
+  "Timer for auto-refresh in devices list mode.")
+
 (define-derived-mode nm-ui-devices-list-mode tabulated-list-mode "NM-Devices"
   "Major mode for device list."
   (setq tabulated-list-format nm-ui-devices-list-format)
   (setq tabulated-list-padding 2)
   (add-hook 'tabulated-list-revert-hook #'nm-ui-devices-list-refresh nil t)
-  (tabulated-list-init-header))
+  (tabulated-list-init-header)
+  (when nm-auto-refresh
+    (setq nm-ui-devices-list-timer
+          (run-with-timer nm-refresh-interval nm-refresh-interval
+                          (lambda ()
+                            (when (eq major-mode 'nm-ui-devices-list-mode)
+                              (nm-ui-devices-list-refresh))))))
+  (add-hook 'kill-buffer-hook
+            (lambda ()
+              (when nm-ui-devices-list-timer
+                (cancel-timer nm-ui-devices-list-timer)))
+            nil t))
 
 (defvar nm-ui-devices-list-mode-map
   (let ((map (make-sparse-keymap)))
@@ -287,11 +394,18 @@
              (type (cdr (assoc 'type device)))
              (state (cdr (assoc 'state device)))
              (driver (or (cdr (assoc 'driver device)) "N/A"))
-             (managed (if (cdr (assoc 'managed device)) "Yes" "No")))
+             (managed (if (cdr (assoc 'managed device)) "Yes" "No"))
+             (state-face (cond ((string-match "connected\\|activated" state)
+                                'nm-ui-device-connected)
+                               ((string-match "disconnected" state)
+                                'nm-ui-device-disconnected)
+                               ((string-match "unavailable\\|unmanaged" state)
+                                'nm-ui-device-unavailable)
+                               (t 'default))))
         (push (list device
                     (vector interface
                             type
-                            state
+                            (propertize state 'face state-face)
                             driver
                             managed))
               entries)))
@@ -352,6 +466,94 @@
     (with-current-buffer buffer
       (nm-ui-devices-list-mode)
       (nm-ui-devices-list-refresh))
+    (switch-to-buffer buffer)))
+
+(defvar nm-ui-dashboard-format
+  [("Item" 25 t)
+   ("Value" 50 nil)]
+  "Format for dashboard columns.")
+
+(define-derived-mode nm-ui-dashboard-mode tabulated-list-mode "NM-Dashboard"
+  "Major mode for NetworkManager dashboard."
+  (setq tabulated-list-format nm-ui-dashboard-format)
+  (setq tabulated-list-padding 2)
+  (add-hook 'tabulated-list-revert-hook #'nm-ui-dashboard-refresh nil t)
+  (tabulated-list-init-header))
+
+(defvar nm-ui-dashboard-mode-map
+  (let ((map (make-sparse-keymap)))
+    (set-keymap-parent map tabulated-list-mode-map)
+    (define-key map "g" #'nm-ui-dashboard-refresh)
+    (define-key map "n" #'nm-toggle-networking)
+    (define-key map "w" #'nm-toggle-wireless)
+    (define-key map "W" #'nm-ui-wifi-list)
+    (define-key map "d" #'nm-ui-devices-list)
+    (define-key map "c" #'nm-ui-connections-list)
+    (define-key map "v" #'nm-vpn-activate)
+    (define-key map "V" #'nm-vpn-deactivate-all)
+    (define-key map "?" #'nm-show-help)
+    map)
+  "Keymap for dashboard mode.")
+
+(defun nm-ui-dashboard-refresh ()
+  "Refresh NetworkManager dashboard."
+  (let ((state (nm-get-state))
+        (connectivity (nm-get-connectivity))
+        (version (nm-get-version))
+        (networking (nm-networking-enabled-p))
+        (wireless (nm-wireless-enabled-p))
+        (active-conns (nm-active-connections-info))
+        entries)
+    (push (list "version" (vector "Version" version)) entries)
+    (push (list "state" (vector "State" 
+                                (propertize (nm-state-to-string state)
+                                            'face (if (>= state 70)
+                                                      'nm-ui-device-connected
+                                                    'nm-ui-device-disconnected))))
+          entries)
+    (push (list "connectivity" (vector "Connectivity" 
+                                       (propertize (nm-connectivity-to-string connectivity)
+                                                   'face (if (= connectivity 4)
+                                                             'nm-ui-device-connected
+                                                           'nm-ui-device-disconnected))))
+          entries)
+    (push (list "networking" (vector "Networking" 
+                                     (propertize (if networking "Enabled" "Disabled")
+                                                 'face (if networking
+                                                           'nm-ui-device-connected
+                                                         'nm-ui-device-disconnected))))
+          entries)
+    (push (list "wireless" (vector "Wireless" 
+                                   (propertize (if wireless "Enabled" "Disabled")
+                                               'face (if wireless
+                                                         'nm-ui-device-connected
+                                                       'nm-ui-device-disconnected))))
+          entries)
+    (push (list "separator" (vector "" "")) entries)
+    (push (list "active-header" (vector (propertize "Active Connections" 'face 'bold) "")) entries)
+    (if active-conns
+        (dolist (conn active-conns)
+          (push (list (format "active-%s" (cdr (assoc 'uuid conn)))
+                      (vector (format "• %s" (cdr (assoc 'id conn)))
+                              (format "%s - %s" 
+                                      (cdr (assoc 'type conn))
+                                      (propertize (cdr (assoc 'state conn))
+                                                  'face 'nm-ui-active-connection))))
+                entries))
+      (push (list "no-active" (vector "" "No active connections")) entries))
+    (setq tabulated-list-entries (nreverse entries))
+    (tabulated-list-print t)))
+
+;;;###autoload
+(defun nm-ui-dashboard ()
+  "Open NetworkManager dashboard in tabulated mode."
+  (interactive)
+  (unless (nm-available-p)
+    (error "NetworkManager service not available"))
+  (let ((buffer (get-buffer-create "*NetworkManager Dashboard*")))
+    (with-current-buffer buffer
+      (nm-ui-dashboard-mode)
+      (nm-ui-dashboard-refresh))
     (switch-to-buffer buffer)))
 
 (provide 'nm-ui-tabulated)
