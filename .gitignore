@@ -1,0 +1,28 @@
+# Claude-related files
+.claude/
+CLAUDE.md
+*.claude
+
+# Emacs backup files
+*~
+\#*\#
+.\#*
+
+# Emacs compiled files
+*.elc
+
+# Emacs auto-save files
+auto-save-list/
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# Build artifacts
+/build/
+/dist/
