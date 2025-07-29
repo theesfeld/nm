@@ -12,12 +12,14 @@ A comprehensive NetworkManager interface for Emacs, providing complete control o
 - **Interactive UI**: User-friendly interface with real-time updates
 - **Auto-refresh**: Automatic status updates with configurable interval
 - **Security**: Support for WPA/WPA2/WPA3 and various VPN protocols
+- **which-key Support**: Enhanced keybinding discovery with which-key integration
 
 ## Requirements
 
 - Emacs 30.1 or later
-- D-Bus support compiled into Emacs
+- D-Bus support compiled into Emacs (check with `(featurep 'dbusbind)`)
 - NetworkManager service running on your system
+- Optional: `which-key` package for enhanced keybinding discovery
 
 ## Installation
 
@@ -31,8 +33,40 @@ A comprehensive NetworkManager interface for Emacs, providing complete control o
   (setq nm-auto-refresh t
         nm-refresh-interval 5)
   :bind-keymap
-  ("C-c n" . nm-prefix-map))
+  ("C-c N" . nm-prefix-map))
 ```
+
+### Manual Installation
+
+Clone the repository and add to your load path:
+
+```bash
+git clone https://github.com/theesfeld/nm ~/.emacs.d/site-lisp/nm
+```
+
+Then add to your Emacs configuration:
+
+```elisp
+(add-to-list 'load-path "~/.emacs.d/site-lisp/nm")
+(require 'nm)
+(global-set-key (kbd "C-c N") nm-prefix-map)
+```
+
+## Quick Start
+
+After installation, you can quickly access NetworkManager features:
+
+1. **Check status**: `C-c N s` - Shows NetworkManager status
+2. **Open dashboard**: `C-c N u` - Opens the main UI
+3. **Browse WiFi**: `C-c N W` - Opens WiFi browser and starts scanning
+4. **Manage connections**: `C-c N c` - Opens connection manager
+5. **Help**: `C-c N ?` - Shows all available keybindings
+
+For interactive use, the UI modes provide the most convenient interface:
+- `M-x nm-ui` - Main dashboard with status overview
+- `M-x nm-ui-wifi` - WiFi network browser with connect/disconnect
+- `M-x nm-ui-connections` - Connection profile manager
+- `M-x nm-ui-devices` - Device management interface
 
 ## Customization
 
@@ -85,14 +119,26 @@ All customizable variables with their default values:
 ;; Connect to secured WiFi
 (nm-wifi-connect "SecureNetwork" "password")
 
+;; Connect to hidden network
+(nm-wifi-connect "HiddenNetwork" "password" t)
+
+;; Connect to specific BSSID
+(nm-wifi-connect "MyNetwork" "password" nil "AA:BB:CC:DD:EE:FF")
+
 ;; Disconnect current WiFi
 (nm-wifi-disconnect)
 
 ;; Forget a saved network
 (nm-wifi-forget-network "OldNetwork")
 
+;; Set network autoconnect
+(nm-wifi-set-autoconnect "MyNetwork" t)
+
 ;; Create WiFi hotspot
 (nm-wifi-create-hotspot "MyHotspot" "password123")
+
+;; Create hotspot with band selection
+(nm-wifi-create-hotspot "MyHotspot" "password123" "bg")
 ```
 
 ### Connection Management
@@ -104,8 +150,14 @@ All customizable variables with their default values:
 ;; Get active connections
 (nm-active-connections-info)
 
-;; Activate a connection
+;; Get connection settings
+(nm-connection-get-settings connection-path)
+
+;; Activate a connection by path
 (nm-activate-connection connection-path device-path "/")
+
+;; Add and activate a new connection
+(nm-add-and-activate-connection settings device-path "/")
 
 ;; Deactivate a connection
 (nm-deactivate-connection active-connection-path)
@@ -115,6 +167,21 @@ All customizable variables with their default values:
 
 ;; Create new Ethernet connection
 (nm-create-ethernet-connection "Work LAN")
+
+;; Create Ethernet connection with static IP
+(nm-create-ethernet-connection "Work LAN" "192.168.1.100/24")
+
+;; Create WiFi connection (returns settings dict)
+(nm-create-wifi-connection "MyNetwork" "password")
+
+;; Create hidden WiFi connection
+(nm-create-wifi-connection "HiddenNetwork" "password" t)
+
+;; Update connection settings
+(nm-connection-update settings)
+
+;; Get connection by UUID
+(nm-get-connection-by-uuid uuid)
 ```
 
 ### VPN Operations
@@ -122,6 +189,9 @@ All customizable variables with their default values:
 ```elisp
 ;; List VPN connections
 (nm-vpn-get-connections)
+
+;; Get active VPN connections
+(nm-vpn-get-active-connections)
 
 ;; Activate VPN
 (nm-vpn-activate "MyVPN")
@@ -132,8 +202,14 @@ All customizable variables with their default values:
 ;; Deactivate all VPNs
 (nm-vpn-deactivate-all)
 
+;; Import VPN configuration (supports .ovpn, .conf, .wg)
+(nm-vpn-import-config "/path/to/config.ovpn")
+
 ;; Create OpenVPN connection
 (nm-vpn-create-openvpn "Work VPN" "/path/to/config.ovpn")
+
+;; Create OpenVPN with credentials
+(nm-vpn-create-openvpn "Work VPN" "/path/to/config.ovpn" "username" "password")
 
 ;; Create WireGuard connection
 (nm-vpn-create-wireguard "WG-VPN"
@@ -141,12 +217,28 @@ All customizable variables with their default values:
                          "server:51820"
                          "public-key")
 
+;; Create WireGuard with preshared key
+(nm-vpn-create-wireguard "WG-VPN"
+                         "private-key"
+                         "server:51820"
+                         "public-key"
+                         "preshared-key")
+
 ;; Create L2TP connection
 (nm-vpn-create-l2tp "L2TP-VPN"
                     "vpn.example.com"
                     "username"
                     "password"
                     "preshared-key")
+
+;; Set VPN autoconnect
+(nm-vpn-set-autoconnect "MyVPN" t)
+
+;; Get VPN kill switch status
+(nm-vpn-get-kill-switch "MyVPN")
+
+;; Enable VPN kill switch
+(nm-vpn-set-kill-switch "MyVPN" t)
 ```
 
 ### Device Management
@@ -158,36 +250,59 @@ All customizable variables with their default values:
 ;; Get device state
 (nm-device-get-state device-path)
 
+;; Get device state as string
+(nm-dbus-device-state-to-string (nm-device-get-state device-path))
+
 ;; Set device managed state
 (nm-device-set-managed device-path t)
+
+;; Set device autoconnect
+(nm-device-set-autoconnect device-path t)
 
 ;; Disconnect device
 (nm-device-disconnect device-path)
 
 ;; Get device IP configuration
 (nm-device-get-ip4-config device-path)
+
+;; Get device IPv6 configuration
+(nm-device-get-ip6-config device-path)
+
+;; Request wireless scan on device
+(nm-device-wireless-request-scan device-path)
+
+;; Get available connections for device
+(nm-device-get-available-connections device-path)
+
+;; Get device driver
+(nm-device-get-driver device-path)
+
+;; Get device firmware version
+(nm-device-get-firmware-version device-path)
 ```
 
 ## Keybindings
 
 ### Global Prefix Map
 
-After loading the package, all commands are available under `C-c n`:
+After loading the package, all commands are available under `C-c N`:
 
-| Key     | Command                  | Description              |
-|---------|--------------------------|--------------------------|
-| `C-c n s` | `nm-status`            | Show NetworkManager status |
-| `C-c n n` | `nm-toggle-networking` | Toggle networking on/off |
-| `C-c n w` | `nm-toggle-wireless`   | Toggle wireless on/off   |
-| `C-c n u` | `nm-ui`                | Open main UI dashboard   |
-| `C-c n W` | `nm-ui-wifi`           | Open WiFi browser        |
-| `C-c n c` | `nm-ui-connections`    | Open connections manager |
-| `C-c n v` | `nm-vpn-activate`      | Activate VPN (with completion) |
-| `C-c n V` | `nm-vpn-deactivate-all`| Deactivate all VPNs     |
-| `C-c n r` | `nm-reload`            | Reload NetworkManager config |
-| `C-c n ?` | `nm-show-help`         | Show all keybindings     |
+| Key       | Command                  | Description                    |
+|-----------|--------------------------|--------------------------------|
+| `C-c N s` | `nm-status`              | Show NetworkManager status     |
+| `C-c N n` | `nm-toggle-networking`   | Toggle networking on/off       |
+| `C-c N w` | `nm-toggle-wireless`     | Toggle wireless on/off         |
+| `C-c N u` | `nm-ui`                  | Open main UI dashboard         |
+| `C-c N W` | `nm-ui-wifi`             | Open WiFi browser              |
+| `C-c N E` | `nm-ui-ethernet`         | Open Ethernet browser          |
+| `C-c N d` | `nm-ui-devices`          | Open device list               |
+| `C-c N c` | `nm-ui-connections`      | Open connections manager       |
+| `C-c N v` | `nm-vpn-activate`        | Activate VPN (with completion) |
+| `C-c N V` | `nm-vpn-deactivate-all`  | Deactivate all VPNs            |
+| `C-c N r` | `nm-reload`              | Reload NetworkManager config   |
+| `C-c N ?` | `nm-show-help`           | Show all keybindings           |
 
-If you have `which-key` installed, pressing `C-c n` will show all available commands.
+If you have `which-key` installed, pressing `C-c N` will show all available commands with descriptions.
 
 ## User Interface
 
@@ -207,8 +322,17 @@ Key bindings:
 | `q` | `quit-window`          | Quit window              |
 | `n` | `nm-toggle-networking` | Toggle networking on/off |
 | `w` | `nm-toggle-wireless`   | Toggle wireless on/off   |
+| `s` | `nm-status`            | Show status              |
+| `u` | `nm-ui`                | Dashboard                |
 | `W` | `nm-ui-wifi`           | Open WiFi browser        |
+| `E` | `nm-ui-ethernet`       | Open Ethernet browser    |
+| `d` | `nm-ui-devices`        | Open device list         |
+| `c` | `nm-ui-connections`    | Open connections list    |
 | `C` | `nm-ui-connections`    | Open connections list    |
+| `v` | `nm-vpn-activate`      | Activate VPN             |
+| `V` | `nm-vpn-deactivate-all`| Deactivate all VPNs      |
+| `r` | `nm-reload`            | Reload config            |
+| `?` | `nm-show-help`         | Show help                |
 
 ### WiFi Browser (`nm-ui-wifi`)
 
@@ -223,11 +347,22 @@ Key bindings:
 | Key   | Command                    | Description                 |
 |-------|----------------------------|-----------------------------|
 | `g`   | `nm-ui-refresh`            | Refresh network list        |
-| `s`   | `nm-ui-scan-wifi`          | Scan for networks           |
+| `s`   | `nm-ui-scan-wifi`          | Scan for WiFi networks      |
+| `S`   | `nm-status`                | Show status                 |
 | `q`   | `quit-window`              | Quit window                 |
 | `RET` | `nm-ui-connect-to-network` | Connect to network at point |
 | `d`   | `nm-ui-disconnect`         | Disconnect current network  |
 | `f`   | `nm-ui-forget-network`     | Forget network at point     |
+| `n`   | `nm-toggle-networking`     | Toggle networking on/off    |
+| `w`   | `nm-toggle-wireless`       | Toggle wireless on/off      |
+| `u`   | `nm-ui`                    | Dashboard                   |
+| `W`   | `nm-ui-wifi`               | WiFi browser                |
+| `E`   | `nm-ui-ethernet`           | Ethernet browser            |
+| `l`   | `nm-ui-devices`            | Device list                 |
+| `c`   | `nm-ui-connections`        | Connections                 |
+| `v`   | `nm-vpn-activate`          | Activate VPN                |
+| `V`   | `nm-vpn-deactivate-all`    | Deactivate all VPNs         |
+| `?`   | `nm-show-help`             | Show help                   |
 
 ### Connections Manager (`nm-ui-connections`)
 
@@ -248,6 +383,79 @@ Key bindings:
 | `d`   | `nm-ui-deactivate-connection` | Deactivate connection    |
 | `e`   | `nm-ui-edit-connection`       | Edit connection          |
 | `D`   | `nm-ui-delete-connection`     | Delete connection        |
+| `s`   | `nm-status`                   | Show status              |
+| `n`   | `nm-toggle-networking`        | Toggle networking on/off |
+| `w`   | `nm-toggle-wireless`          | Toggle wireless on/off   |
+| `u`   | `nm-ui`                       | Dashboard                |
+| `W`   | `nm-ui-wifi`                  | WiFi browser             |
+| `E`   | `nm-ui-ethernet`              | Ethernet browser         |
+| `c`   | `nm-ui-connections`           | Connections              |
+| `l`   | `nm-ui-devices`               | Device list              |
+| `v`   | `nm-vpn-activate`             | Activate VPN             |
+| `V`   | `nm-vpn-deactivate-all`       | Deactivate all VPNs      |
+| `r`   | `nm-reload`                   | Reload config            |
+| `?`   | `nm-show-help`                | Show help                |
+
+### Ethernet Browser (`nm-ui-ethernet`)
+
+Browse and manage Ethernet devices:
+
+```
+M-x nm-ui-ethernet
+```
+
+Key bindings:
+
+| Key   | Command                      | Description              |
+|-------|------------------------------|--------------------------|
+| `g`   | `nm-ui-refresh`              | Refresh device list      |
+| `q`   | `quit-window`                | Quit window              |
+| `RET` | `nm-ui-activate-ethernet-device` | Activate device      |
+| `a`   | `nm-ui-activate-ethernet-device` | Activate device      |
+| `d`   | `nm-ui-disconnect-device`    | Disconnect device        |
+| `s`   | `nm-status`                  | Show status              |
+| `n`   | `nm-toggle-networking`       | Toggle networking on/off |
+| `w`   | `nm-toggle-wireless`         | Toggle wireless on/off   |
+| `u`   | `nm-ui`                      | Dashboard                |
+| `W`   | `nm-ui-wifi`                 | WiFi browser             |
+| `E`   | `nm-ui-ethernet`             | Ethernet browser         |
+| `l`   | `nm-ui-devices`              | Device list              |
+| `c`   | `nm-ui-connections`          | Connections              |
+| `v`   | `nm-vpn-activate`            | Activate VPN             |
+| `V`   | `nm-vpn-deactivate-all`      | Deactivate all VPNs      |
+| `r`   | `nm-reload`                  | Reload config            |
+| `?`   | `nm-show-help`               | Show help                |
+
+### Device Manager (`nm-ui-devices`)
+
+View and manage all network devices:
+
+```
+M-x nm-ui-devices
+```
+
+Key bindings:
+
+| Key   | Command                       | Description                    |
+|-------|-------------------------------|--------------------------------|
+| `g`   | `nm-ui-refresh`               | Refresh device list            |
+| `q`   | `quit-window`                 | Quit window                    |
+| `RET` | `nm-ui-show-device-details`   | Show device details            |
+| `m`   | `nm-ui-toggle-device-managed` | Toggle managed state           |
+| `a`   | `nm-ui-toggle-device-autoconnect` | Toggle autoconnect        |
+| `d`   | `nm-ui-disconnect-device`     | Disconnect device              |
+| `s`   | `nm-status`                   | Show status                    |
+| `n`   | `nm-toggle-networking`        | Toggle networking on/off       |
+| `w`   | `nm-toggle-wireless`          | Toggle wireless on/off         |
+| `u`   | `nm-ui`                       | Dashboard                      |
+| `W`   | `nm-ui-wifi`                  | WiFi browser                   |
+| `E`   | `nm-ui-ethernet`              | Ethernet browser               |
+| `l`   | `nm-ui-devices`               | Device list                    |
+| `c`   | `nm-ui-connections`           | Connections                    |
+| `v`   | `nm-vpn-activate`             | Activate VPN                   |
+| `V`   | `nm-vpn-deactivate-all`       | Deactivate all VPNs            |
+| `r`   | `nm-reload`                   | Reload config                  |
+| `?`   | `nm-show-help`                | Show help                      |
 
 ## Module Documentation
 
@@ -322,25 +530,38 @@ WiFi-specific functionality:
 
 Key functions:
 - `nm-wifi-scan-all`: Scan all WiFi devices
-- `nm-wifi-connect`: Connect to WiFi network
-- `nm-wifi-get-all-access-points`: Get all visible APs
+- `nm-wifi-connect`: Connect to WiFi network with optional password, hidden, and BSSID
+- `nm-wifi-connect-to-ap`: Connect using access point info structure
+- `nm-wifi-get-all-access-points`: Get all visible APs with details
+- `nm-wifi-disconnect`: Disconnect current WiFi
+- `nm-wifi-forget-network`: Remove saved network profile
+- `nm-wifi-set-autoconnect`: Configure network autoconnect
 - `nm-wifi-create-hotspot`: Create WiFi hotspot
-- `nm-wifi-strength-bars`: Visual signal strength
+- `nm-wifi-strength-bars`: Visual signal strength indicator
+- `nm-wifi-get-current-connection`: Get current WiFi connection info
 
 ### nm-vpn.el - VPN Support
 
 VPN management supporting:
-- Multiple VPN protocols
+- Multiple VPN protocols (OpenVPN, WireGuard, L2TP)
 - Connection import/export
 - Profile creation
 - State monitoring
+- Kill switch configuration
 
 Key functions:
 - `nm-vpn-get-connections`: List VPN connections
+- `nm-vpn-get-active-connections`: Get active VPN connections
 - `nm-vpn-activate`: Activate VPN by name
+- `nm-vpn-deactivate`: Deactivate VPN by name
+- `nm-vpn-deactivate-all`: Deactivate all active VPNs
 - `nm-vpn-create-openvpn`: Create OpenVPN profile
 - `nm-vpn-create-wireguard`: Create WireGuard profile
-- `nm-vpn-import-config`: Import VPN configuration
+- `nm-vpn-create-l2tp`: Create L2TP profile
+- `nm-vpn-import-config`: Import VPN configuration file
+- `nm-vpn-set-autoconnect`: Configure VPN autoconnect
+- `nm-vpn-get-kill-switch`: Get kill switch status
+- `nm-vpn-set-kill-switch`: Configure kill switch
 
 ### nm-ui.el - User Interface
 

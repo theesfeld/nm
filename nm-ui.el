@@ -31,6 +31,9 @@
 (require 'widget)
 (require 'wid-edit)
 
+(declare-function nm-show-help "nm" ())
+(declare-function nm-reload "nm" (&optional flags))
+
 (defvar nm-ui-buffer-name "*NetworkManager*"
   "Name of the NetworkManager UI buffer.")
 
@@ -384,7 +387,11 @@
    ((equal (buffer-name) nm-ui-wifi-buffer-name)
     (nm-ui-render-wifi-networks))
    ((string-match-p "Connections" (buffer-name))
-    (nm-ui-render-connections))))
+    (nm-ui-render-connections))
+   ((string-match-p "Ethernet" (buffer-name))
+    (nm-ui-render-ethernet-devices))
+   ((string-match-p "Devices" (buffer-name))
+    (nm-ui-render-devices))))
 
 (defun nm-ui-start-refresh-timer ()
   "Start automatic refresh timer."
@@ -409,16 +416,95 @@
         "q" "quit"
         "n" "toggle networking"
         "w" "toggle wireless"
+        "s" "show status"
+        "u" "dashboard"
         "W" "WiFi browser"
-        "C" "connections"))
+        "E" "Ethernet browser"
+        "d" "device list"
+        "c" "connections"
+        "C" "connections"
+        "v" "activate VPN"
+        "V" "deactivate all VPNs"
+        "r" "reload config"
+        "?" "show help"))
      ((eq major-mode 'nm-ui-wifi-mode)
       (which-key-add-major-mode-key-based-replacements 'nm-ui-wifi-mode
         "g" "refresh"
         "s" "scan WiFi"
+        "S" "show status"
         "q" "quit"
         "RET" "connect"
         "d" "disconnect"
-        "f" "forget network")))))
+        "f" "forget network"
+        "n" "toggle networking"
+        "w" "toggle wireless"
+        "u" "dashboard"
+        "W" "WiFi browser"
+        "E" "Ethernet browser"
+        "l" "device list"
+        "c" "connections"
+        "v" "activate VPN"
+        "V" "deactivate all VPNs"
+        "?" "show help"))
+     ((eq major-mode 'nm-ui-ethernet-mode)
+      (which-key-add-major-mode-key-based-replacements 'nm-ui-ethernet-mode
+        "g" "refresh"
+        "q" "quit"
+        "RET" "activate"
+        "a" "activate"
+        "d" "disconnect"
+        "s" "show status"
+        "n" "toggle networking"
+        "w" "toggle wireless"
+        "u" "dashboard"
+        "W" "WiFi browser"
+        "E" "Ethernet browser"
+        "l" "device list"
+        "c" "connections"
+        "v" "activate VPN"
+        "V" "deactivate all VPNs"
+        "?" "show help"))
+     ((eq major-mode 'nm-ui-device-mode)
+      (which-key-add-major-mode-key-based-replacements 'nm-ui-device-mode
+        "g" "refresh"
+        "q" "quit"
+        "RET" "show details"
+        "m" "toggle managed"
+        "a" "toggle autoconnect"
+        "d" "disconnect"
+        "s" "show status"
+        "n" "toggle networking"
+        "w" "toggle wireless"
+        "u" "dashboard"
+        "W" "WiFi browser"
+        "E" "Ethernet browser"
+        "l" "device list"
+        "c" "connections"
+        "v" "activate VPN"
+        "V" "deactivate all VPNs"
+        "?" "show help"))
+     ((and (eq major-mode 'nm-ui-mode)
+           (eq (current-local-map) nm-ui-connections-mode-map))
+      (which-key-add-major-mode-key-based-replacements 'nm-ui-mode
+        "g" "refresh"
+        "q" "quit"
+        "RET" "activate"
+        "a" "activate"
+        "d" "deactivate"
+        "e" "edit"
+        "D" "delete"
+        "s" "show status"
+        "n" "toggle networking"
+        "w" "toggle wireless"
+        "u" "dashboard"
+        "W" "WiFi browser"
+        "E" "Ethernet browser"
+        "c" "connections"
+        "l" "device list"
+        "v" "activate VPN"
+        "V" "deactivate all VPNs"
+        "r" "reload config"
+        "?" "show help")))))
 
 (define-derived-mode nm-ui-mode special-mode "NetworkManager"
   "Major mode for NetworkManager interface."
@@ -434,14 +520,33 @@
 (define-derived-mode nm-ui-connection-mode special-mode "NM-Connection"
   "Major mode for NetworkManager connection editor.")
 
+(define-derived-mode nm-ui-ethernet-mode special-mode "NM-Ethernet"
+  "Major mode for NetworkManager Ethernet browser."
+  (setq truncate-lines t)
+  (nm-ui-setup-which-key-for-mode))
+
+(define-derived-mode nm-ui-device-mode special-mode "NM-Devices"
+  "Major mode for NetworkManager device list."
+  (setq truncate-lines t)
+  (nm-ui-setup-which-key-for-mode))
+
 (defvar nm-ui-mode-map
   (let ((map (make-sparse-keymap)))
     (define-key map "g" #'nm-ui-refresh)
     (define-key map "q" #'quit-window)
     (define-key map "n" #'nm-toggle-networking)
     (define-key map "w" #'nm-toggle-wireless)
+    (define-key map "s" #'nm-status)
+    (define-key map "u" #'nm-ui)
     (define-key map "W" #'nm-ui-wifi)
+    (define-key map "E" #'nm-ui-ethernet)
+    (define-key map "d" #'nm-ui-devices)
+    (define-key map "c" #'nm-ui-connections)
     (define-key map "C" #'nm-ui-connections)
+    (define-key map "v" #'nm-vpn-activate)
+    (define-key map "V" #'nm-vpn-deactivate-all)
+    (define-key map "r" #'nm-reload)
+    (define-key map "?" #'nm-show-help)
     map)
   "Keymap for nm-ui-mode.")
 
@@ -449,10 +554,21 @@
   (let ((map (make-sparse-keymap)))
     (define-key map "g" #'nm-ui-refresh)
     (define-key map "s" #'nm-ui-scan-wifi)
+    (define-key map "S" #'nm-status)
     (define-key map "q" #'quit-window)
     (define-key map (kbd "RET") #'nm-ui-connect-to-network)
     (define-key map "d" #'nm-ui-disconnect)
     (define-key map "f" #'nm-ui-forget-network)
+    (define-key map "n" #'nm-toggle-networking)
+    (define-key map "w" #'nm-toggle-wireless)
+    (define-key map "u" #'nm-ui)
+    (define-key map "W" #'nm-ui-wifi)
+    (define-key map "E" #'nm-ui-ethernet)
+    (define-key map "l" #'nm-ui-devices)
+    (define-key map "c" #'nm-ui-connections)
+    (define-key map "v" #'nm-vpn-activate)
+    (define-key map "V" #'nm-vpn-deactivate-all)
+    (define-key map "?" #'nm-show-help)
     map)
   "Keymap for nm-ui-wifi-mode.")
 
@@ -465,8 +581,65 @@
     (define-key map "d" #'nm-ui-deactivate-connection)
     (define-key map "e" #'nm-ui-edit-connection)
     (define-key map "D" #'nm-ui-delete-connection)
+    (define-key map "s" #'nm-status)
+    (define-key map "n" #'nm-toggle-networking)
+    (define-key map "w" #'nm-toggle-wireless)
+    (define-key map "u" #'nm-ui)
+    (define-key map "W" #'nm-ui-wifi)
+    (define-key map "E" #'nm-ui-ethernet)
+    (define-key map "c" #'nm-ui-connections)
+    (define-key map "l" #'nm-ui-devices)
+    (define-key map "v" #'nm-vpn-activate)
+    (define-key map "V" #'nm-vpn-deactivate-all)
+    (define-key map "r" #'nm-reload)
+    (define-key map "?" #'nm-show-help)
     map)
   "Keymap for connections list.")
+
+(defvar nm-ui-ethernet-mode-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map "g" #'nm-ui-refresh)
+    (define-key map "q" #'quit-window)
+    (define-key map (kbd "RET") #'nm-ui-activate-ethernet-device)
+    (define-key map "a" #'nm-ui-activate-ethernet-device)
+    (define-key map "d" #'nm-ui-disconnect-device)
+    (define-key map "s" #'nm-status)
+    (define-key map "n" #'nm-toggle-networking)
+    (define-key map "w" #'nm-toggle-wireless)
+    (define-key map "u" #'nm-ui)
+    (define-key map "W" #'nm-ui-wifi)
+    (define-key map "E" #'nm-ui-ethernet)
+    (define-key map "l" #'nm-ui-devices)
+    (define-key map "c" #'nm-ui-connections)
+    (define-key map "v" #'nm-vpn-activate)
+    (define-key map "V" #'nm-vpn-deactivate-all)
+    (define-key map "r" #'nm-reload)
+    (define-key map "?" #'nm-show-help)
+    map)
+  "Keymap for nm-ui-ethernet-mode.")
+
+(defvar nm-ui-device-mode-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map "g" #'nm-ui-refresh)
+    (define-key map "q" #'quit-window)
+    (define-key map (kbd "RET") #'nm-ui-show-device-details)
+    (define-key map "m" #'nm-ui-toggle-device-managed)
+    (define-key map "a" #'nm-ui-toggle-device-autoconnect)
+    (define-key map "d" #'nm-ui-disconnect-device)
+    (define-key map "s" #'nm-status)
+    (define-key map "n" #'nm-toggle-networking)
+    (define-key map "w" #'nm-toggle-wireless)
+    (define-key map "u" #'nm-ui)
+    (define-key map "W" #'nm-ui-wifi)
+    (define-key map "E" #'nm-ui-ethernet)
+    (define-key map "l" #'nm-ui-devices)
+    (define-key map "c" #'nm-ui-connections)
+    (define-key map "v" #'nm-vpn-activate)
+    (define-key map "V" #'nm-vpn-deactivate-all)
+    (define-key map "r" #'nm-reload)
+    (define-key map "?" #'nm-show-help)
+    map)
+  "Keymap for nm-ui-device-mode.")
 
 ;;;###autoload
 (defun nm-ui ()
@@ -503,7 +676,115 @@
     (with-current-buffer buffer
       (nm-ui-mode)
       (use-local-map nm-ui-connections-mode-map)
-      (nm-ui-render-connections))
+      (nm-ui-render-connections)
+      (nm-ui-setup-which-key-for-mode))
+    (switch-to-buffer buffer)))
+
+(defun nm-ui-get-ethernet-devices ()
+  "Get list of ethernet devices."
+  (seq-filter (lambda (device)
+                (equal (cdr (assoc 'type device)) "ethernet"))
+              (nm-devices-info)))
+
+(defun nm-ui-render-ethernet-devices ()
+  "Render ethernet devices list."
+  (let ((inhibit-read-only t)
+        (devices (nm-ui-get-ethernet-devices)))
+    (erase-buffer)
+    (nm-ui-insert-header "Ethernet Devices")
+    (insert "\n")
+    (if devices
+        (dolist (device devices)
+          (let ((start (point)))
+            (insert (format "• %s - %s %s\n"
+                            (cdr (assoc 'interface device))
+                            (cdr (assoc 'state device))
+                            (if (cdr (assoc 'managed device)) "" "[unmanaged]")))
+            (put-text-property start (point) 'nm-device device)))
+      (insert "No ethernet devices found\n"))))
+
+(defun nm-ui-render-devices ()
+  "Render all devices list."
+  (let ((inhibit-read-only t)
+        (devices (nm-devices-info)))
+    (erase-buffer)
+    (nm-ui-insert-header "Network Devices")
+    (insert "\n")
+    (dolist (device devices)
+      (let ((start (point)))
+        (insert (nm-ui-format-device-line device))
+        (put-text-property start (point) 'nm-device device)))))
+
+(defun nm-ui-activate-ethernet-device ()
+  "Activate ethernet device at point."
+  (interactive)
+  (let ((device (get-text-property (point) 'nm-device)))
+    (when device
+      (let ((connections (nm-device-get-available-connections (cdr (assoc 'path device)))))
+        (if connections
+            (nm-activate-connection (car connections) (cdr (assoc 'path device)) "/")
+          (message "No available connections for this device"))))))
+
+(defun nm-ui-disconnect-device ()
+  "Disconnect device at point."
+  (interactive)
+  (let ((device (get-text-property (point) 'nm-device)))
+    (when device
+      (condition-case err
+          (progn
+            (nm-device-disconnect (cdr (assoc 'path device)))
+            (message "Device disconnected"))
+        (error (message "Error disconnecting device: %s" (error-message-string err)))))))
+
+(defun nm-ui-show-device-details ()
+  "Show details for device at point."
+  (interactive)
+  (let ((device (get-text-property (point) 'nm-device)))
+    (when device
+      (message "Device: %s | Type: %s | State: %s | Driver: %s"
+               (cdr (assoc 'interface device))
+               (cdr (assoc 'type device))
+               (cdr (assoc 'state device))
+               (or (cdr (assoc 'driver device)) "N/A")))))
+
+(defun nm-ui-toggle-device-managed ()
+  "Toggle managed state for device at point."
+  (interactive)
+  (let ((device (get-text-property (point) 'nm-device)))
+    (when device
+      (let ((current (cdr (assoc 'managed device))))
+        (nm-device-set-managed (cdr (assoc 'path device)) (not current))
+        (message "Device %s is now %s"
+                 (cdr (assoc 'interface device))
+                 (if current "unmanaged" "managed"))
+        (nm-ui-refresh)))))
+
+(defun nm-ui-toggle-device-autoconnect ()
+  "Toggle autoconnect for device at point."
+  (interactive)
+  (let ((device (get-text-property (point) 'nm-device)))
+    (when device
+      (let ((current (cdr (assoc 'autoconnect device))))
+        (nm-device-set-autoconnect (cdr (assoc 'path device)) (not current))
+        (message "Device %s autoconnect %s"
+                 (cdr (assoc 'interface device))
+                 (if current "disabled" "enabled"))
+        (nm-ui-refresh)))))
+
+(defun nm-ui-ethernet-internal ()
+  "Internal function to open ethernet browser."
+  (let ((buffer (get-buffer-create "*NetworkManager Ethernet*")))
+    (with-current-buffer buffer
+      (nm-ui-ethernet-mode)
+      (nm-ui-render-ethernet-devices))
+    (switch-to-buffer buffer)))
+
+(defun nm-ui-devices-internal ()
+  "Internal function to open device list."
+  (let ((buffer (get-buffer-create "*NetworkManager Devices*")))
+    (with-current-buffer buffer
+      (nm-ui-device-mode)
+      (nm-ui-render-devices))
     (switch-to-buffer buffer)))
 
 (provide 'nm-ui)

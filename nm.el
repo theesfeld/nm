@@ -23,6 +23,10 @@
 ;;; Code:
 
 (require 'dbus)
+(declare-function nm-ui-ethernet-internal "nm-ui" ())
+(declare-function nm-ui-devices-internal "nm-ui" ())
+(declare-function nm-vpn-activate "nm-vpn" (vpn-name))
+(declare-function nm-vpn-deactivate-all "nm-vpn" ())
 
 (defgroup nm nil
   "NetworkManager interface for Emacs."
@@ -209,6 +213,8 @@
     (define-key map "w" #'nm-toggle-wireless)
     (define-key map "u" #'nm-ui)
     (define-key map "W" #'nm-ui-wifi)
+    (define-key map "E" #'nm-ui-ethernet)
+    (define-key map "d" #'nm-ui-devices)
     (define-key map "c" #'nm-ui-connections)
     (define-key map "v" #'nm-vpn-activate)
     (define-key map "V" #'nm-vpn-deactivate-all)
@@ -220,26 +226,54 @@
 (defun nm-show-help ()
   "Show NetworkManager commands help."
   (interactive)
-  (describe-keymap nm-prefix-map))
+  (if (fboundp 'describe-keymap)
+      (describe-keymap nm-prefix-map)
+    (describe-variable 'nm-prefix-map)))
 
 (defun nm-setup-which-key ()
   "Setup which-key descriptions for NetworkManager."
   (when (fboundp 'which-key-add-key-based-replacements)
     (which-key-add-key-based-replacements
-      "C-c n" "NetworkManager"
-      "C-c n s" "status"
-      "C-c n n" "toggle networking"
-      "C-c n w" "toggle wireless"
-      "C-c n u" "UI dashboard"
-      "C-c n W" "WiFi browser"
-      "C-c n c" "connections"
-      "C-c n v" "activate VPN"
-      "C-c n V" "deactivate all VPNs"
-      "C-c n r" "reload config"
-      "C-c n ?" "show help")))
+      "C-c N" "NetworkManager"
+      "C-c N s" "status"
+      "C-c N n" "toggle networking"
+      "C-c N w" "toggle wireless"
+      "C-c N u" "UI dashboard"
+      "C-c N W" "WiFi browser"
+      "C-c N E" "Ethernet browser"
+      "C-c N d" "device list"
+      "C-c N c" "connections"
+      "C-c N v" "activate VPN"
+      "C-c N V" "deactivate all VPNs"
+      "C-c N r" "reload config"
+      "C-c N ?" "show help")))
 
 (with-eval-after-load 'which-key
   (nm-setup-which-key))
+
+;;;###autoload
+(defun nm-ui-ethernet ()
+  "Open NetworkManager Ethernet browser."
+  (interactive)
+  (unless (nm-available-p)
+    (error "NetworkManager service not available"))
+  (require 'nm-ui)
+  (nm-ui-ethernet-internal))
+
+;;;###autoload
+(defun nm-ui-devices ()
+  "Open NetworkManager device list."
+  (interactive)
+  (unless (nm-available-p)
+    (error "NetworkManager service not available"))
+  (require 'nm-ui)
+  (nm-ui-devices-internal))
+
+(defun nm-setup-global-keybindings ()
+  "Setup global keybindings for NetworkManager."
+  (global-set-key (kbd "C-c N") nm-prefix-map))
+
+(nm-setup-global-keybindings)
 
 (provide 'nm)
 ;;; nm.el ends here
