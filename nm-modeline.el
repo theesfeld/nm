@@ -48,11 +48,17 @@
   :type 'integer
   :group 'nm-modeline)
 
-(defcustom nm-modeline-show-connection-name t
-  "Whether to show connection name in modeline.
-When nil, only the connection icon is displayed."
-  :type 'boolean
+(defcustom nm-modeline-display-format 'icon-and-text
+  "Display format for modeline status.
+Possible values:
+  `icon-only'        - Show only the connection icon with tooltip
+  `text-only'        - Show only the connection text with tooltip
+  `icon-and-text'    - Show both icon and connection text with tooltip"
+  :type '(choice (const :tag "Icon only" icon-only)
+                 (const :tag "Text only" text-only)
+                 (const :tag "Icon and text" icon-and-text))
   :group 'nm-modeline)
+
 
 (defcustom nm-modeline-show-vpn t
   "Whether to show VPN status in modeline."
@@ -171,9 +177,10 @@ When nil, only the connection icon is displayed."
   (let* ((interface (or (cdr (assoc 'interface device-info)) id))
          (icon (nm-modeline-get-icon 'ethernet))
          (tooltip (nm-modeline-build-tooltip "802-3-ethernet" interface device-info nil))
-         (display-text (if nm-modeline-show-connection-name
-                           (format "%s %s" icon interface)
-                         icon)))
+         (display-text (pcase nm-modeline-display-format
+                         ('icon-only icon)
+                         ('text-only interface)
+                         ('icon-and-text (format "%s %s" icon interface)))))
     (propertize display-text 'help-echo tooltip)))
 
 (defun nm-modeline-format-wifi (id device-path)
@@ -184,12 +191,11 @@ When nil, only the connection icon is displayed."
                      (nm-access-point-get-strength ap-path)))
          (icon (nm-modeline-get-icon 'wifi strength))
          (tooltip (nm-modeline-build-tooltip "802-11-wireless" id nil strength))
-         (display-text (if nm-modeline-show-connection-name
-                           (format "%s %s%s"
-                                   icon
-                                   id
-                                   (if strength (format " %d%%" strength) ""))
-                         icon)))
+         (text-part (format "%s%s" id (if strength (format " %d%%" strength) "")))
+         (display-text (pcase nm-modeline-display-format
+                         ('icon-only icon)
+                         ('text-only text-part)
+                         ('icon-and-text (format "%s %s" icon text-part)))))
     (propertize display-text 'help-echo tooltip)))
 
 (defun nm-modeline-format-vpn-status (active-conns)
@@ -200,9 +206,10 @@ When nil, only the connection icon is displayed."
         (let* ((vpn-id (cdr (assoc 'id vpn-active)))
                (icon (nm-modeline-get-icon 'vpn))
                (tooltip (nm-modeline-build-tooltip "vpn" vpn-id nil nil))
-               (display-text (if nm-modeline-show-connection-name
-                                 (format "%s %s" icon vpn-id)
-                               icon)))
+               (display-text (pcase nm-modeline-display-format
+                               ('icon-only icon)
+                               ('text-only vpn-id)
+                               ('icon-and-text (format "%s %s" icon vpn-id)))))
           (propertize display-text 'help-echo tooltip))))))
 
 (defun nm-modeline-format-status ()
@@ -228,9 +235,10 @@ When nil, only the connection icon is displayed."
                 (_
                  (let* ((icon (nm-modeline-get-icon 'ethernet))
                         (tooltip (format "%s: %s" type id))
-                        (display-text (if nm-modeline-show-connection-name
-                                          (format "%s %s" icon id)
-                                        icon)))
+                        (display-text (pcase nm-modeline-display-format
+                                        ('icon-only icon)
+                                        ('text-only id)
+                                        ('icon-and-text (format "%s %s" icon id)))))
                    (push (propertize display-text 'help-echo tooltip) status-parts))))
               
               (let ((vpn-status (nm-modeline-format-vpn-status active-conns)))
@@ -239,9 +247,10 @@ When nil, only the connection icon is displayed."
           
           (let* ((icon (nm-modeline-get-icon 'disconnected))
                  (tooltip "Network: Offline")
-                 (display-text (if nm-modeline-show-connection-name
-                                   (format "%s Offline" icon)
-                                 icon)))
+                 (display-text (pcase nm-modeline-display-format
+                                 ('icon-only icon)
+                                 ('text-only "Offline")
+                                 ('icon-and-text (format "%s Offline" icon)))))
             (push (propertize display-text 'help-echo tooltip) status-parts)))
         
         (mapconcat #'identity status-parts " "))

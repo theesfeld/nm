@@ -48,7 +48,7 @@ This version introduces significant improvements to the user interface and exper
 
 #### Enhanced Modeline
 - New tooltips showing connection details on hover
-- Option to display icons only without connection names
+- Customizable display format: icon-only, text-only, or icon-and-text
 - Improved formatting for all connection types
 
 #### Interactive Elements
@@ -89,7 +89,8 @@ This version introduces significant improvements to the user interface and exper
   ;; Modeline customization
   (setq nm-modeline-format " [%s]"  ; Format string for modeline
         nm-modeline-refresh-interval 5
-        nm-modeline-show-vpn t)
+        nm-modeline-show-vpn t
+        nm-modeline-display-format 'icon-and-text)  ; or 'icon-only, 'text-only
   
   ;; Custom icons - WiFi signal strength
   (setq nm-modeline-wifi-icons
@@ -182,7 +183,7 @@ All customizable variables with their default values:
 |--------------------------------|---------|---------------------------------------|
 | `nm-modeline-format`           | `" %s"` | Format string for modeline display    |
 | `nm-modeline-refresh-interval` | `5`     | Refresh interval in seconds           |
-| `nm-modeline-show-connection-name` | `t` | Show connection name or icon only     |
+| `nm-modeline-display-format`  | `'icon-and-text` | Display format: icon-only, text-only, or icon-and-text |
 | `nm-modeline-show-vpn`         | `t`     | Whether to show VPN status            |
 | `nm-modeline-disconnected-icon`| `"⚠"`   | Icon when disconnected                |
 | `nm-modeline-ethernet-icon`    | `"🖧"`   | Icon for ethernet connection          |
@@ -874,7 +875,10 @@ Enable the modeline indicator:
 (setq nm-modeline-show-vpn nil)
 
 ;; Show only icons without connection names
-(setq nm-modeline-show-connection-name nil)
+(setq nm-modeline-display-format 'icon-only)
+
+;; Or show only text without icons
+(setq nm-modeline-display-format 'text-only)
 ```
 
 The modeline will display:
@@ -883,7 +887,11 @@ The modeline will display:
 - `📶 MyWiFi 85%` - WiFi with signal strength
 - `🔒 VPN` - Active VPN connection
 
-When `nm-modeline-show-connection-name` is set to `nil`, only icons are displayed.
+The display format can be customized with `nm-modeline-display-format`:
+- `'icon-only` - Shows only icons
+- `'text-only` - Shows only connection text
+- `'icon-and-text` - Shows both icons and text (default)
+
 Hover over the modeline indicator to see full connection details in a tooltip.
 
 ### nm-notify.el - Desktop Notifications
