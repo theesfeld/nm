@@ -66,6 +66,11 @@
 
 (defun nm-vpn-activate (vpn-name)
   "Activate VPN connection by VPN-NAME."
+  (interactive
+   (list (completing-read "VPN to activate: "
+                          (mapcar (lambda (conn) (cdr (assoc 'id conn)))
+                                  (nm-vpn-get-connections))
+                          nil t)))
   (let ((conn-info (seq-find (lambda (conn)
                                (equal (cdr (assoc 'id conn)) vpn-name))
                              (nm-vpn-get-connections))))
@@ -84,8 +89,14 @@
 
 (defun nm-vpn-deactivate-all ()
   "Deactivate all active VPN connections."
-  (dolist (conn (nm-vpn-get-active-connections))
-    (nm-deactivate-connection (cdr (assoc 'path conn)))))
+  (interactive)
+  (let ((active-vpns (nm-vpn-get-active-connections)))
+    (if active-vpns
+        (progn
+          (dolist (conn active-vpns)
+            (nm-deactivate-connection (cdr (assoc 'path conn))))
+          (message "Deactivated %d VPN connection(s)" (length active-vpns)))
+      (message "No active VPN connections"))))
 
 (defun nm-vpn-create-openvpn (name config-file &optional username password)
   "Create OpenVPN connection NAME from CONFIG-FILE with optional USERNAME and PASSWORD."

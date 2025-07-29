@@ -399,14 +399,37 @@
     (cancel-timer nm-ui-refresh-timer)
     (setq nm-ui-refresh-timer nil)))
 
+(defun nm-ui-setup-which-key-for-mode ()
+  "Setup which-key descriptions for current mode."
+  (when (fboundp 'which-key-add-major-mode-key-based-replacements)
+    (cond
+     ((eq major-mode 'nm-ui-mode)
+      (which-key-add-major-mode-key-based-replacements 'nm-ui-mode
+        "g" "refresh"
+        "q" "quit"
+        "n" "toggle networking"
+        "w" "toggle wireless"
+        "W" "WiFi browser"
+        "C" "connections"))
+     ((eq major-mode 'nm-ui-wifi-mode)
+      (which-key-add-major-mode-key-based-replacements 'nm-ui-wifi-mode
+        "g" "refresh"
+        "s" "scan WiFi"
+        "q" "quit"
+        "RET" "connect"
+        "d" "disconnect"
+        "f" "forget network")))))
+
 (define-derived-mode nm-ui-mode special-mode "NetworkManager"
   "Major mode for NetworkManager interface."
   (setq truncate-lines t)
-  (nm-ui-start-refresh-timer))
+  (nm-ui-start-refresh-timer)
+  (nm-ui-setup-which-key-for-mode))
 
 (define-derived-mode nm-ui-wifi-mode special-mode "NM-WiFi"
   "Major mode for NetworkManager WiFi browser."
-  (setq truncate-lines t))
+  (setq truncate-lines t)
+  (nm-ui-setup-which-key-for-mode))
 
 (define-derived-mode nm-ui-connection-mode special-mode "NM-Connection"
   "Major mode for NetworkManager connection editor.")

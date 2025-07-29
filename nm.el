@@ -202,5 +202,44 @@
     (setq nm-capabilities (nm-get-permissions))
     (message "NetworkManager %s initialized" nm-version)))
 
+(defvar nm-prefix-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map "s" #'nm-status)
+    (define-key map "n" #'nm-toggle-networking)
+    (define-key map "w" #'nm-toggle-wireless)
+    (define-key map "u" #'nm-ui)
+    (define-key map "W" #'nm-ui-wifi)
+    (define-key map "c" #'nm-ui-connections)
+    (define-key map "v" #'nm-vpn-activate)
+    (define-key map "V" #'nm-vpn-deactivate-all)
+    (define-key map "r" #'nm-reload)
+    (define-key map "?" #'nm-show-help)
+    map)
+  "Keymap for NetworkManager commands.")
+
+(defun nm-show-help ()
+  "Show NetworkManager commands help."
+  (interactive)
+  (describe-keymap nm-prefix-map))
+
+(defun nm-setup-which-key ()
+  "Setup which-key descriptions for NetworkManager."
+  (when (fboundp 'which-key-add-key-based-replacements)
+    (which-key-add-key-based-replacements
+      "C-c n" "NetworkManager"
+      "C-c n s" "status"
+      "C-c n n" "toggle networking"
+      "C-c n w" "toggle wireless"
+      "C-c n u" "UI dashboard"
+      "C-c n W" "WiFi browser"
+      "C-c n c" "connections"
+      "C-c n v" "activate VPN"
+      "C-c n V" "deactivate all VPNs"
+      "C-c n r" "reload config"
+      "C-c n ?" "show help")))
+
+(with-eval-after-load 'which-key
+  (nm-setup-which-key))
+
 (provide 'nm)
 ;;; nm.el ends here

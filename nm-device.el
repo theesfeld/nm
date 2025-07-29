@@ -232,7 +232,7 @@
 (defun nm-device-wireless-request-scan (device-path &optional options)
   "Request scan on wireless DEVICE-PATH with optional OPTIONS."
   (nm-dbus-call-method device-path nm-dbus-interface-wireless "RequestScan"
-                       (or options (list :array))))
+                       (or options '(:array :signature "{sv}"))))
 
 (defun nm-device-wireless-get-all-access-points (device-path)
   "Get all access points for wireless DEVICE-PATH."

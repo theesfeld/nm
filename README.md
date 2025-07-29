@@ -30,11 +30,8 @@ A comprehensive NetworkManager interface for Emacs, providing complete control o
   :config
   (setq nm-auto-refresh t
         nm-refresh-interval 5)
-  :bind
-  (("C-c n s" . nm-status)
-   ("C-c n u" . nm-ui)
-   ("C-c n w" . nm-ui-wifi)
-   ("C-c n c" . nm-ui-connections)))
+  :bind-keymap
+  ("C-c n" . nm-prefix-map))
 ```
 
 ## Customization
@@ -170,6 +167,27 @@ All customizable variables with their default values:
 ;; Get device IP configuration
 (nm-device-get-ip4-config device-path)
 ```
+
+## Keybindings
+
+### Global Prefix Map
+
+After loading the package, all commands are available under `C-c n`:
+
+| Key     | Command                  | Description              |
+|---------|--------------------------|--------------------------|
+| `C-c n s` | `nm-status`            | Show NetworkManager status |
+| `C-c n n` | `nm-toggle-networking` | Toggle networking on/off |
+| `C-c n w` | `nm-toggle-wireless`   | Toggle wireless on/off   |
+| `C-c n u` | `nm-ui`                | Open main UI dashboard   |
+| `C-c n W` | `nm-ui-wifi`           | Open WiFi browser        |
+| `C-c n c` | `nm-ui-connections`    | Open connections manager |
+| `C-c n v` | `nm-vpn-activate`      | Activate VPN (with completion) |
+| `C-c n V` | `nm-vpn-deactivate-all`| Deactivate all VPNs     |
+| `C-c n r` | `nm-reload`            | Reload NetworkManager config |
+| `C-c n ?` | `nm-show-help`         | Show all keybindings     |
+
+If you have `which-key` installed, pressing `C-c n` will show all available commands.
 
 ## User Interface
 
