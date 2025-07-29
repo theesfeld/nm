@@ -844,49 +844,67 @@
         (widget-forward 1)))
     (switch-to-buffer buffer)))
 
-(defun nm-ui-save-connection (connection name-widget type-widget autoconnect-widget extra-widgets)
-  "Save connection with values from widgets."
-  (let* ((name (widget-value name-widget))
-         (type (widget-value type-widget))
-         (autoconnect (widget-value autoconnect-widget))
-         (uuid (or (when connection (cdr (assoc 'uuid connection)))
-                   (nm-generate-uuid)))
-         (settings `(("connection" . (("id" . ,name)
-                                      ("uuid" . ,uuid)
-                                      ("type" . ,type)
-                                      ("autoconnect" . ,autoconnect))))))
-    
-    ;; Add type-specific settings
-    (cond
-     ((equal type "802-11-wireless")
-      (let ((ssid (widget-value (cdr (assoc 'ssid extra-widgets))))
-            (password (widget-value (cdr (assoc 'password extra-widgets)))))
-        (push `("802-11-wireless" . (("ssid" . ,(nm-dbus-string-to-ssid ssid))
-                                      ("mode" . "infrastructure")))
-              settings)
-        (when (and password (> (length password) 0))
-          ;; Add security settings but NOT the actual password
-          (push `("802-11-wireless-security" . (("key-mgmt" . "wpa-psk")))
-                settings)
-          ;; Store password securely if auth-source is enabled
-          (require 'nm-secrets)
-          (when nm-secrets-use-auth-source
-            (nm-secrets-save-to-auth-source name "psk" password))
-          ;; Clear password from widget
-          (widget-value-set (cdr (assoc 'password extra-widgets)) "")
-          ;; Clear password from memory
-          (dotimes (i (length password))
-            (aset password i ?\0)))))
-     
-     ((equal type "vpn")
-      (let ((vpn-type (widget-value (cdr (assoc 'vpn-type extra-widgets)))))
-        (push `("vpn" . (("service-type" . ,(format "org.freedesktop.NetworkManager.%s" vpn-type))))
-              settings))))
-    
-    ;; Add IPv4/IPv6 settings
+(defun nm-ui-extract-widget-values (name-widget type-widget autoconnect-widget extra-widgets)
+  "Extract values from connection form widgets."
+  (list :name (widget-value name-widget)
+        :type (widget-value type-widget)
+        :autoconnect (widget-value autoconnect-widget)
+        :extra extra-widgets))
+
+(defun nm-ui-build-connection-settings (values uuid)
+  "Build connection settings from VALUES and UUID."
+  (let ((settings `(("connection" . (("id" . ,(plist-get values :name))
+                                     ("uuid" . ,uuid)
+                                     ("type" . ,(plist-get values :type))
+                                     ("autoconnect" . ,(plist-get values :autoconnect)))))))
+    (nm-ui-add-type-specific-settings settings values)
     (push '("ipv4" . (("method" . "auto"))) settings)
     (push '("ipv6" . (("method" . "auto"))) settings)
-    
+    settings))
+
+(defun nm-ui-add-type-specific-settings (settings values)
+  "Add type-specific settings to SETTINGS based on VALUES."
+  (let ((type (plist-get values :type))
+        (extra-widgets (plist-get values :extra)))
+    (cond
+     ((equal type "802-11-wireless")
+      (nm-ui-add-wifi-settings settings extra-widgets (plist-get values :name)))
+     ((equal type "vpn")
+      (nm-ui-add-vpn-settings settings extra-widgets)))))
+
+(defun nm-ui-add-wifi-settings (settings extra-widgets connection-name)
+  "Add WiFi settings to SETTINGS from EXTRA-WIDGETS for CONNECTION-NAME."
+  (let ((ssid (widget-value (cdr (assoc 'ssid extra-widgets))))
+        (password (widget-value (cdr (assoc 'password extra-widgets)))))
+    (push `("802-11-wireless" . (("ssid" . ,(nm-dbus-string-to-ssid ssid))
+                                  ("mode" . "infrastructure")))
+          settings)
+    (when (and password (> (length password) 0))
+      (push `("802-11-wireless-security" . (("key-mgmt" . "wpa-psk")))
+            settings)
+      (nm-ui-handle-wifi-password connection-name password extra-widgets))))
+
+(defun nm-ui-handle-wifi-password (connection-name password extra-widgets)
+  "Handle WiFi PASSWORD for CONNECTION-NAME and clear from EXTRA-WIDGETS."
+  (require 'nm-secrets)
+  (when nm-secrets-use-auth-source
+    (nm-secrets-save-to-auth-source connection-name "psk" password))
+  (widget-value-set (cdr (assoc 'password extra-widgets)) "")
+  (nm-secrets-clear-string password))
+
+(defun nm-ui-add-vpn-settings (settings extra-widgets)
+  "Add VPN settings to SETTINGS from EXTRA-WIDGETS."
+  (let ((vpn-type (widget-value (cdr (assoc 'vpn-type extra-widgets)))))
+    (push `("vpn" . (("service-type" . ,(format "org.freedesktop.NetworkManager.%s" vpn-type))))
+          settings)))
+
+(defun nm-ui-save-connection (connection name-widget type-widget autoconnect-widget extra-widgets)
+  "Save connection with values from widgets."
+  (let* ((values (nm-ui-extract-widget-values name-widget type-widget autoconnect-widget extra-widgets))
+         (uuid (or (when connection (cdr (assoc 'uuid connection)))
+                   (nm-generate-uuid)))
+         (settings (nm-ui-build-connection-settings values uuid))
+         (name (plist-get values :name)))
     (condition-case err
         (if connection
             (progn
@@ -896,7 +914,6 @@
           (nm-add-connection (nm-dbus-alist-to-connection-settings settings))
           (message "Created connection: %s" name))
       (error (message "Error saving connection: %s" (error-message-string err))))
-    
     (kill-buffer)
     (nm-ui-refresh)))
 

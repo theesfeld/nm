@@ -68,6 +68,15 @@
   :type 'string
   :group 'nm-modeline)
 
+(defcustom nm-modeline-wifi-icons
+  '((high . "📶")
+    (medium . "📶")
+    (low . "📶")
+    (none . "📶"))
+  "Icons for different WiFi signal strengths."
+  :type '(alist :key-type symbol :value-type string)
+  :group 'nm-modeline)
+
 (defcustom nm-modeline-vpn-icon "🔒"
   "Icon for VPN connection."
   :type 'string
@@ -84,7 +93,7 @@
 (defvar nm-modeline-timer nil
   "Timer for modeline updates.")
 
-(defvar nm-modeline-nerd-icons
+(defcustom nm-modeline-nerd-icons
   '((disconnected . "")
     (ethernet . "")
     (wifi-high . "")
@@ -92,7 +101,9 @@
     (wifi-low . "")
     (wifi-none . "")
     (vpn . ""))
-  "Nerd Font icons for modeline.")
+  "Nerd Font icons for modeline. Customize these to use your preferred icons."
+  :type '(alist :key-type symbol :value-type string)
+  :group 'nm-modeline)
 
 (defun nm-modeline-get-icon (type &optional strength)
   "Get icon for connection TYPE with optional signal STRENGTH."
@@ -113,17 +124,27 @@
     (pcase type
       ('disconnected nm-modeline-disconnected-icon)
       ('ethernet nm-modeline-ethernet-icon)
-      ('wifi nm-modeline-wifi-icon)
+      ('wifi (if strength
+                  (cond
+                   ((>= strength 75) (alist-get 'high nm-modeline-wifi-icons nm-modeline-wifi-icon))
+                   ((>= strength 50) (alist-get 'medium nm-modeline-wifi-icons nm-modeline-wifi-icon))
+                   ((>= strength 25) (alist-get 'low nm-modeline-wifi-icons nm-modeline-wifi-icon))
+                   (t (alist-get 'none nm-modeline-wifi-icons nm-modeline-wifi-icon)))
+                nm-modeline-wifi-icon))
       ('vpn nm-modeline-vpn-icon)
       (_ "?"))))
 
 (defun nm-modeline-get-primary-info ()
   "Get primary connection information."
-  (let ((primary-conn (nm-get-primary-connection)))
-    (when primary-conn
-      (list :type (cdr (assoc 'type primary-conn))
-            :id (cdr (assoc 'id primary-conn))
-            :device-path (car (cdr (assoc 'devices primary-conn)))))))
+  (let ((primary-path (nm-get-primary-connection)))
+    (when (and primary-path (not (string= primary-path "/")))
+      (let ((active-conns (nm-active-connections-info)))
+        (when-let ((primary-conn (seq-find (lambda (conn)
+                                             (string= (cdr (assoc 'path conn)) primary-path))
+                                           active-conns)))
+          (list :type (cdr (assoc 'type primary-conn))
+                :id (cdr (assoc 'id primary-conn))
+                :device-path (car (cdr (assoc 'devices primary-conn)))))))))
 
 (defun nm-modeline-format-ethernet (device-info)
   "Format ethernet connection with DEVICE-INFO."

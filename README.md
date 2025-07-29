@@ -10,10 +10,13 @@ A comprehensive NetworkManager interface for Emacs, providing complete control o
 - **Device Management**: Control network interfaces and their states
 - **Connection Profiles**: Create, edit, and manage network connections
 - **Interactive UI**: User-friendly interface with real-time updates
+- **Tabulated List UI**: Enhanced sortable table views for WiFi, connections, and devices
 - **Connection Editor**: Create and edit connections with interactive forms
-- **Modeline Indicator**: Optional modeline display of connection status
+- **Modeline Indicator**: Optional modeline display with customizable icons
 - **Auto-refresh**: Automatic status updates with configurable interval
 - **Security**: Support for WPA/WPA2/WPA3 and various VPN protocols
+- **Notifications**: Desktop notifications for network state changes
+- **Export/Import**: Backup and restore connection profiles
 - **which-key Support**: Enhanced keybinding discovery with which-key integration
 
 ## Requirements
@@ -31,16 +34,60 @@ A comprehensive NetworkManager interface for Emacs, providing complete control o
 (use-package nm
   :vc (:url "https://github.com/theesfeld/nm")
   :ensure t
-  :config
+  :init
+  ;; Core settings (before package loads)
   (setq nm-auto-refresh t
         nm-refresh-interval 5)
-  ;; Optional: Enable modeline indicator
-  ;; (nm-modeline-mode 1)
-  ;; Or with custom settings:
+  
+  :config
+  ;; Enable optional features
+  (nm-modeline-mode 1)      ; Show connection status in modeline
+  (nm-notify-mode 1)        ; Enable desktop notifications
+  
+  ;; Modeline customization
+  (setq nm-modeline-format " [%s]"  ; Format string for modeline
+        nm-modeline-refresh-interval 5
+        nm-modeline-show-vpn t)
+  
+  ;; Custom icons - WiFi signal strength
+  (setq nm-modeline-wifi-icons
+        '((high . "▂▄▆█")     ; 75-100%
+          (medium . "▂▄▆_")   ; 50-74%
+          (low . "▂▄__")      ; 25-49%
+          (none . "▂___")))   ; 0-24%
+  
+  ;; Custom icons - Connection types
+  (setq nm-modeline-disconnected-icon "⚠"
+        nm-modeline-ethernet-icon "🔌"
+        nm-modeline-wifi-icon "📶"
+        nm-modeline-vpn-icon "🔒")
+  
+  ;; Alternative: Use Nerd Fonts (requires Nerd Font installed)
   ;; (setq nm-modeline-use-nerd-fonts t)
-  ;; (nm-modeline-mode 1)
+  
+  ;; Notification settings
+  (setq nm-notify-connect-message "Connected to %s"
+        nm-notify-disconnect-message "Disconnected from %s"
+        nm-notify-use-notifications-lib t)  ; Use desktop notifications
+  
+  ;; Security settings
+  (setq nm-secrets-use-auth-source t        ; Use Emacs auth-source
+        auth-sources '("~/.authinfo.gpg"))  ; Encrypted password storage
+  
+  ;; UI preferences
+  (setq nm-ui-use-tabulated-list t         ; Use enhanced table views
+        nm-ui-wifi-auto-scan t              ; Auto-scan when opening WiFi browser
+        nm-ui-connections-show-auto nil)    ; Hide autoconnect connections
+  
   :bind-keymap
-  ("C-c N" . nm-prefix-map))
+  ("C-c N" . nm-prefix-map)
+  
+  :bind
+  ;; Quick access bindings (optional)
+  (("C-c n s" . nm-status)           ; Quick status
+   ("C-c n w" . nm-ui-wifi)          ; Jump to WiFi
+   ("C-c n c" . nm-ui-connections)   ; Jump to connections
+   ("C-c n n" . nm-toggle-networking)))
 ```
 
 ### Manual Installation
@@ -97,8 +144,52 @@ All customizable variables with their default values:
 | `nm-modeline-disconnected-icon`| `"⚠"`   | Icon when disconnected                |
 | `nm-modeline-ethernet-icon`    | `"🖧"`   | Icon for ethernet connection          |
 | `nm-modeline-wifi-icon`        | `"📶"`  | Icon for WiFi connection              |
+| `nm-modeline-wifi-icons`       | alist   | Icons for different WiFi strengths    |
 | `nm-modeline-vpn-icon`         | `"🔒"`   | Icon for VPN connection               |
 | `nm-modeline-use-nerd-fonts`   | `nil`   | Use Nerd Font icons instead of emoji  |
+| `nm-modeline-nerd-icons`       | alist   | Customizable Nerd Font icons          |
+
+You can customize WiFi strength icons separately:
+
+```elisp
+(setq nm-modeline-wifi-icons
+      '((high . "📶")    ;; 75-100% signal
+        (medium . "📶")  ;; 50-74% signal
+        (low . "📶")     ;; 25-49% signal
+        (none . "📶")))  ;; 0-24% signal
+```
+
+Or use custom Nerd Font icons:
+
+```elisp
+(setq nm-modeline-use-nerd-fonts t)
+(setq nm-modeline-nerd-icons
+      '((disconnected . "")
+        (ethernet . "")
+        (wifi-high . "")
+        (wifi-medium . "")
+        (wifi-low . "")
+        (wifi-none . "")
+        (vpn . "")))
+
+### Notification Options
+
+| Variable                          | Default               | Description                              |
+|-----------------------------------|-----------------------|------------------------------------------|
+| `nm-notify-enabled`               | `t`                   | Enable desktop notifications             |
+| `nm-notify-use-notifications-lib` | `t`                   | Use notifications library if available   |
+| `nm-notify-connect-message`       | `"Connected to %s"`   | Format for connection notifications      |
+| `nm-notify-disconnect-message`    | `"Disconnected from %s"` | Format for disconnection notifications |
+
+### UI Options
+
+| Variable                      | Default | Description                           |
+|-------------------------------|---------|---------------------------------------|
+| `nm-ui-use-tabulated-list`    | `t`     | Use enhanced tabulated list views     |
+| `nm-ui-wifi-auto-scan`        | `t`     | Auto-scan when opening WiFi browser   |
+| `nm-ui-connections-show-auto` | `t`     | Show autoconnect connections          |
+| `nm-ui-buffer-name`           | `"*NetworkManager*"` | Main UI buffer name      |
+| `nm-ui-wifi-buffer-name`      | `"*NetworkManager WiFi*"` | WiFi browser buffer |
 
 ## Usage
 
@@ -321,6 +412,9 @@ After loading the package, all commands are available under `C-c N`:
 | `C-c N V` | `nm-vpn-deactivate-all`  | Deactivate all VPNs            |
 | `C-c N r` | `nm-reload`              | Reload NetworkManager config   |
 | `C-c N ?` | `nm-show-help`           | Show all keybindings           |
+| `C-c N T w` | `nm-ui-wifi-list`      | WiFi list (tabulated mode)     |
+| `C-c N T c` | `nm-ui-connections-list` | Connections (tabulated mode) |
+| `C-c N T d` | `nm-ui-devices-list`   | Devices (tabulated mode)       |
 
 If you have `which-key` installed, pressing `C-c N` will show all available commands with descriptions.
 
@@ -478,6 +572,119 @@ Key bindings:
 | `r`   | `nm-reload`                   | Reload config                  |
 | `?`   | `nm-show-help`                | Show help                      |
 
+## Tabulated List Interfaces
+
+The package includes enhanced tabulated-list-mode interfaces for better data presentation:
+
+### WiFi List (`nm-ui-wifi-list`)
+
+Displays WiFi networks in a sortable table:
+
+```
+M-x nm-ui-wifi-list
+```
+
+Features:
+- Sortable columns (SSID, Channel, Security, Strength)
+- Visual signal strength indicators
+- Current connection highlighted
+- Auto-refresh on scan
+
+Key bindings:
+- `RET` or `c` - Connect to network
+- `d` - Disconnect current network
+- `f` - Forget network
+- `s` - Scan for networks
+- `S` - Sort by column at point
+
+### Connections List (`nm-ui-connections-list`)
+
+Manage connections in a tabulated view:
+
+```
+M-x nm-ui-connections-list
+```
+
+Features:
+- Shows all saved connections with status
+- Active connections highlighted
+- Sortable by name, type, or status
+
+Key bindings:
+- `RET` or `a` - Activate connection
+- `d` - Deactivate connection
+- `e` - Edit connection
+- `D` - Delete connection
+- `+` - Create new connection
+
+### Devices List (`nm-ui-devices-list`)
+
+View all network devices:
+
+```
+M-x nm-ui-devices-list
+```
+
+Features:
+- Shows interface, type, state, driver
+- Sortable columns
+- Manage device settings
+
+Key bindings:
+- `RET` - Show device details
+- `m` - Toggle managed state
+- `a` - Toggle autoconnect
+- `d` - Disconnect device
+
+## Connection Export/Import
+
+Export and import connection profiles for backup or sharing:
+
+```elisp
+;; Export single connection
+(nm-connection-export connection-path "/path/to/file.nmconnection")
+
+;; Export all connections
+(nm-connection-export-all "/path/to/backup-directory/")
+
+;; Import single connection
+(nm-connection-import "/path/to/file.nmconnection")
+
+;; Import directory of connections
+(nm-connection-import-directory "/path/to/backup-directory/")
+
+;; Export in NetworkManager keyfile format
+(nm-connection-export-keyfile connection-path "/path/to/file.conf")
+```
+
+Interactive commands:
+- `M-x nm-connection-export-all` - Export all connections to a directory
+- `M-x nm-connection-import` - Import a connection file
+- `M-x nm-connection-import-directory` - Import all connections from a directory
+
+## Notifications
+
+Enable desktop notifications for network state changes:
+
+```elisp
+;; Enable notifications
+(nm-notify-mode 1)
+
+;; Customize notification messages
+(setq nm-notify-connect-message "Connected to %s 🎉")
+(setq nm-notify-disconnect-message "Disconnected from %s 😢")
+(setq nm-notify-vpn-connect-message "VPN secure: %s 🔒")
+
+;; Use desktop notifications (requires notifications.el)
+(setq nm-notify-use-notifications-lib t)
+```
+
+Notifications are shown for:
+- Connection/disconnection events
+- VPN state changes
+- Network state changes
+- Connectivity changes
+
 ## Module Documentation
 
 ### nm.el - Main Module
@@ -629,6 +836,45 @@ The modeline will display:
 - `🖧 eth0` - Ethernet connection
 - `📶 MyWiFi 85%` - WiFi with signal strength
 - `🔒 VPN` - Active VPN connection
+
+### nm-notify.el - Desktop Notifications
+
+Desktop notification support for network state changes:
+- Connection established/lost notifications
+- VPN connect/disconnect alerts
+- Customizable notification messages
+- Integration with system notification daemon
+
+Enable notifications:
+```elisp
+;; Enable desktop notifications
+(nm-notify-mode 1)
+
+;; Customize notification messages
+(setq nm-notify-connect-message "Connected to %s 🎉"
+      nm-notify-disconnect-message "Disconnected from %s ⚠️")
+
+;; Use system notifications (requires notifications.el)
+(setq nm-notify-use-notifications-lib t)
+```
+
+### nm-ui-tabulated.el - Enhanced Table Views
+
+Professional tabulated list views for:
+- WiFi network browser with sortable columns
+- Connection manager with filtering
+- Device list with detailed information
+
+Features:
+- Sortable columns (click headers or use `S`)
+- Filtering and searching
+- Better performance with large lists
+- Consistent UI across all views
+
+The tabulated views are automatically used when available. To force classic views:
+```elisp
+(setq nm-ui-use-tabulated-list nil)
+```
 
 ## Security
 

@@ -27,6 +27,9 @@
 (declare-function nm-ui-devices-internal "nm-ui" ())
 (declare-function nm-vpn-activate "nm-vpn" (vpn-name))
 (declare-function nm-vpn-deactivate-all "nm-vpn" ())
+(declare-function nm-ui-wifi-list "nm-ui-tabulated" ())
+(declare-function nm-ui-connections-list "nm-ui-tabulated" ())
+(declare-function nm-ui-devices-list "nm-ui-tabulated" ())
 
 (defgroup nm nil
   "NetworkManager interface for Emacs."
@@ -206,6 +209,14 @@
     (setq nm-capabilities (nm-get-permissions))
     (message "NetworkManager %s initialized" nm-version)))
 
+(defvar nm-tabulated-prefix-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map "w" #'nm-ui-wifi-list)
+    (define-key map "c" #'nm-ui-connections-list)
+    (define-key map "d" #'nm-ui-devices-list)
+    map)
+  "Keymap for NetworkManager tabulated UI commands.")
+
 (defvar nm-prefix-map
   (let ((map (make-sparse-keymap)))
     (define-key map "s" #'nm-status)
@@ -220,6 +231,7 @@
     (define-key map "V" #'nm-vpn-deactivate-all)
     (define-key map "r" #'nm-reload)
     (define-key map "?" #'nm-show-help)
+    (define-key map "T" nm-tabulated-prefix-map)
     map)
   "Keymap for NetworkManager commands.")
 
@@ -246,7 +258,10 @@
       "C-c N v" "activate VPN"
       "C-c N V" "deactivate all VPNs"
       "C-c N r" "reload config"
-      "C-c N ?" "show help")))
+      "C-c N ?" "show help"
+      "C-c N T w" "WiFi list (tabulated)"
+      "C-c N T c" "connections list (tabulated)"
+      "C-c N T d" "devices list (tabulated)")))
 
 (with-eval-after-load 'which-key
   (nm-setup-which-key))

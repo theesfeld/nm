@@ -37,9 +37,14 @@
 
 (defun nm-wifi-scan (device-path &optional callback)
   "Request WiFi scan on DEVICE-PATH with optional CALLBACK."
-  (when callback
-    (push (cons device-path callback) nm-wifi-scan-callbacks))
-  (nm-device-wireless-request-scan device-path))
+  (condition-case err
+      (progn
+        (when callback
+          (push (cons device-path callback) nm-wifi-scan-callbacks))
+        (nm-device-wireless-request-scan device-path))
+    (dbus-error
+     (message "Failed to scan WiFi on device: %s" (error-message-string err))
+     nil)))
 
 (defun nm-wifi-scan-all (&optional callback)
   "Request WiFi scan on all WiFi devices with optional CALLBACK."
@@ -139,19 +144,26 @@
 
 (defun nm-wifi-connect (ssid &optional password hidden bssid)
   "Connect to WiFi network with SSID, optional PASSWORD, HIDDEN and BSSID."
-  (let* ((devices (nm-wifi-get-devices))
-         (device (car devices))
-         (settings (nm-create-wifi-connection ssid password hidden)))
-    (when bssid
-      (let* ((parsed (nm-dbus-connection-settings-to-alist settings))
-             (wifi-settings (assoc "802-11-wireless" parsed)))
-        (setcdr wifi-settings
-                (cons (cons "bssid" (nm-dbus-string-to-mac bssid))
-                      (cdr wifi-settings)))
-        (setq settings (nm-dbus-alist-to-connection-settings parsed))))
-    (if device
-        (nm-add-and-activate-connection settings device "/")
-      (error "No WiFi device available"))))
+  (condition-case err
+      (let* ((devices (nm-wifi-get-devices))
+             (device (car devices))
+             (settings (nm-create-wifi-connection ssid password hidden)))
+        (unless device
+          (error "No WiFi device available"))
+        (when bssid
+          (let* ((parsed (nm-dbus-connection-settings-to-alist settings))
+                 (wifi-settings (assoc "802-11-wireless" parsed)))
+            (setcdr wifi-settings
+                    (cons (cons "bssid" (nm-dbus-string-to-mac bssid))
+                          (cdr wifi-settings)))
+            (setq settings (nm-dbus-alist-to-connection-settings parsed))))
+        (nm-add-and-activate-connection settings device "/"))
+    (dbus-error
+     (message "Failed to connect to WiFi network '%s': %s" ssid (error-message-string err))
+     nil)
+    (error
+     (message "Error connecting to WiFi network '%s': %s" ssid (error-message-string err))
+     nil)))
 
 (defun nm-wifi-find-connection-for-ssid (ssid)
   "Find existing connection path for SSID."

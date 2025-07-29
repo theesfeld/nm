@@ -71,12 +71,20 @@
                           (mapcar (lambda (conn) (cdr (assoc 'id conn)))
                                   (nm-vpn-get-connections))
                           nil t)))
-  (let ((conn-info (seq-find (lambda (conn)
-                               (equal (cdr (assoc 'id conn)) vpn-name))
-                             (nm-vpn-get-connections))))
-    (if conn-info
+  (condition-case err
+      (let ((conn-info (seq-find (lambda (conn)
+                                   (equal (cdr (assoc 'id conn)) vpn-name))
+                                 (nm-vpn-get-connections))))
+        (unless conn-info
+          (error "VPN connection not found: %s" vpn-name))
         (nm-activate-connection (cdr (assoc 'path conn-info)) "/" "/")
-      (error "VPN connection not found: %s" vpn-name))))
+        (message "Activating VPN: %s" vpn-name))
+    (dbus-error
+     (message "Failed to activate VPN '%s': %s" vpn-name (error-message-string err))
+     nil)
+    (error
+     (message "Error activating VPN '%s': %s" vpn-name (error-message-string err))
+     nil)))
 
 (defun nm-vpn-deactivate (vpn-name)
   "Deactivate VPN connection by VPN-NAME."

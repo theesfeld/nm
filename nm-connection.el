@@ -275,5 +275,93 @@
   "Register HANDLER for removed connections."
   (nm-dbus-register-signal nm-settings-path nm-dbus-interface-settings "ConnectionRemoved" handler))
 
+(defun nm-connection-export (connection-path file)
+  "Export connection at CONNECTION-PATH to FILE."
+  (let ((settings (nm-connection-get-settings connection-path)))
+    (with-temp-file file
+      (insert ";; NetworkManager connection export\n")
+      (insert ";; Created: " (format-time-string "%Y-%m-%d %H:%M:%S") "\n\n")
+      (pp settings (current-buffer)))
+    (message "Exported connection to %s" file)))
+
+(defun nm-connection-export-all (directory)
+  "Export all connections to DIRECTORY."
+  (interactive "DExport connections to directory: ")
+  (let ((connections (nm-list-connections))
+        (count 0))
+    (dolist (conn-path connections)
+      (let* ((settings (nm-connection-get-settings conn-path))
+             (parsed (nm-dbus-connection-settings-to-alist settings))
+             (conn-settings (cdr (assoc "connection" parsed)))
+             (id (cdr (assoc "id" conn-settings)))
+             (uuid (cdr (assoc "uuid" conn-settings)))
+             (filename (expand-file-name
+                        (format "%s_%s.nmconnection" id uuid)
+                        directory)))
+        (nm-connection-export conn-path filename)
+        (setq count (1+ count))))
+    (message "Exported %d connections to %s" count directory)))
+
+(defun nm-connection-import (file)
+  "Import connection from FILE."
+  (interactive "fImport connection from file: ")
+  (condition-case err
+      (with-temp-buffer
+        (insert-file-contents file)
+        (goto-char (point-min))
+        (while (looking-at "^;;")
+          (forward-line))
+        (let ((settings (read (current-buffer))))
+          (nm-add-connection settings)
+          (message "Imported connection from %s" file)))
+    (error
+     (message "Failed to import connection: %s" (error-message-string err)))))
+
+(defun nm-connection-import-directory (directory)
+  "Import all connection files from DIRECTORY."
+  (interactive "DImport connections from directory: ")
+  (let ((files (directory-files directory t "\\.nmconnection$"))
+        (count 0)
+        (failed 0))
+    (dolist (file files)
+      (condition-case nil
+          (progn
+            (nm-connection-import file)
+            (setq count (1+ count)))
+        (error (setq failed (1+ failed)))))
+    (message "Imported %d connections, %d failed" count failed)))
+
+(defun nm-connection-to-keyfile (connection-path)
+  "Convert connection at CONNECTION-PATH to NetworkManager keyfile format."
+  (let* ((settings (nm-connection-get-settings connection-path))
+         (parsed (nm-dbus-connection-settings-to-alist settings))
+         (lines '()))
+    (dolist (group parsed)
+      (let ((group-name (car group))
+            (group-settings (cdr group)))
+        (push (format "[%s]" group-name) lines)
+        (dolist (setting group-settings)
+          (let ((key (car setting))
+                (value (cdr setting)))
+            (cond
+             ((stringp value)
+              (push (format "%s=%s" key value) lines))
+             ((numberp value)
+              (push (format "%s=%s" key value) lines))
+             ((booleanp value)
+              (push (format "%s=%s" key (if value "true" "false")) lines))
+             ((listp value)
+              (when value
+                (push (format "%s=%s" key (mapconcat #'prin1-to-string value ";")) lines))))))
+        (push "" lines)))
+    (mapconcat #'identity (nreverse lines) "\n")))
+
+(defun nm-connection-export-keyfile (connection-path file)
+  "Export connection at CONNECTION-PATH to FILE in keyfile format."
+  (let ((content (nm-connection-to-keyfile connection-path)))
+    (with-temp-file file
+      (insert content))
+    (message "Exported connection to %s (keyfile format)" file)))
+
 (provide 'nm-connection)
 ;;; nm-connection.el ends here
